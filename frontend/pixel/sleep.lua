@@ -2,12 +2,11 @@
 The Pixel sleep screen ("Fade to paper").
 
 The cover of the book you're reading fills the screen as big halftone dots
-that shrink and fade into blank paper toward the bottom. In the white space:
+that shrink and fade into blank paper near the bottom. Below, small:
 
-    VOL. I · CH 1 · LOOMINGS
-    MOBY
-    DICK
-    HERMAN MELVILLE                38%
+    CH 01 · LOOMINGS
+    MOBY DICK                      38%
+    HERMAN MELVILLE
     ███████░░░░░░░░░░░░░░░░░░░░░░
                          PRESS POWER
 
@@ -162,96 +161,59 @@ local function text(str, fc, color, max_width)
     return TextWidget:new{ text = str, face = fc, fgcolor = color or Theme.ink, max_width = max_width }
 end
 
--- Greedy word wrap of the title in the big pixel font; shrinks the size
--- until it fits in three lines and every word fits the width.
-local function wrapTitle(title, width, size)
-    local words = {}
-    for w in title:gmatch("%S+") do table.insert(words, w) end
-    if #words == 0 then words = { "KOREADER" } end
-    -- Short titles stack one word per line ("MOBY / DICK"), as big as fits.
-    if #words <= 3 then
-        local sz = size
-        for _ = 1, 12 do
-            local fc = face(Theme.fonts.vt, sz)
-            local fits = true
-            for _, w in ipairs(words) do
-                local t = TextWidget:new{ text = w, face = fc }
-                if t:getSize().w > width then fits = false end
-                t:free()
-            end
-            if fits then return words, fc, sz end
-            sz = math.floor(sz * 0.88)
-        end
-    end
-    for _ = 1, 12 do
-        local fc = face(Theme.fonts.vt, size)
-        local function wid(s)
-            local t = TextWidget:new{ text = s, face = fc }
-            local v = t:getSize().w
-            t:free()
-            return v
-        end
-        local lines, cur, ok = {}, nil, true
-        for _, w in ipairs(words) do
-            if wid(w) > width then ok = false break end
-            local try = cur and (cur .. " " .. w) or w
-            if cur and wid(try) > width then
-                table.insert(lines, cur); cur = w
-            else
-                cur = try
-            end
-        end
-        if cur then table.insert(lines, cur) end
-        if ok and #lines <= 3 then return lines, fc, size end
-        size = math.floor(size * 0.85)
-    end
-    return { title }, face(Theme.fonts.vt, size), size
-end
-
 function SleepScreen:paintTo(bb, x, y)
     local W, H, f = self.width, self.height, self.f
     local function P(n) return math.max(1, math.floor(n * f + 0.5)) end
     bb:paintRect(x, y, W, H, Theme.paper)
 
     -- Lay out the text block bottom-up first, so the dots can fade out above it.
+    -- It stays small (the bottom fifth or so): the cover is the picture.
     local side = P(26)
     local inner = W - 2 * side
     local muted = Blitbuffer.Color8(0x55)
     local draw = {}
 
-    local prompt = text("PRESS POWER", face(Theme.fonts.vt, P(18)), muted)
+    local prompt = text("PRESS POWER", face(Theme.fonts.vt, P(15)), muted)
     local ps = prompt:getSize()
-    local py = y + H - P(26) - ps.h
+    local py = y + H - P(22) - ps.h
     table.insert(draw, { prompt, x + W - side - ps.w, py })
 
-    local bar_h = P(6)
-    local bar_y = py - P(8) - bar_h
+    local bar_h = P(5)
+    local bar_y = py - P(6) - bar_h
 
-    local pct = text(math.floor(self.percent * 100 + 0.5) .. "%", face(Theme.fonts.vt, P(22)))
-    local pcs = pct:getSize()
-    local row_y = bar_y - P(8) - pcs.h
-    table.insert(draw, { pct, x + W - side - pcs.w, row_y })
+    local cursor = bar_y - P(8)
     if self.authors and self.authors ~= "" then
-        local a = text(self.authors, face(Theme.fonts.mono, P(10)), Theme.ink, inner - pcs.w - P(12))
+        local a = text(self.authors, face(Theme.fonts.mono, P(9)), Theme.ink, inner)
         local as = a:getSize()
-        table.insert(draw, { a, x + side, row_y + pcs.h - as.h - P(2) })
+        cursor = cursor - as.h
+        table.insert(draw, { a, x + side, cursor })
+        cursor = cursor - P(4)
     end
 
-    local lines, tface, tsize = wrapTitle(self.title or "", inner, P(92))
-    local step = math.floor(tsize * 0.8 + 0.5)
-    local first = TextWidget:new{ text = lines[1], face = tface }
-    local lh = first:getSize().h
-    first:free()
-    local inset = math.floor(lh * 0.12) -- the pixel font has empty space above its capitals
-    local ty = row_y - P(4) - lh - (#lines - 1) * step + inset
-    for i, line in ipairs(lines) do
-        table.insert(draw, { text(line, tface), x + side - P(2), ty + (i - 1) * step })
+    -- Title and percent on one line; long titles shrink, then get cut with "…"
+    local pct = text(math.floor(self.percent * 100 + 0.5) .. "%", face(Theme.fonts.vt, P(20)))
+    local pcs = pct:getSize()
+    local title_w = inner - pcs.w - P(12)
+    local size, t = P(40), nil
+    for _ = 1, 6 do
+        if t then t:free() end
+        t = TextWidget:new{ text = self.title or "", face = face(Theme.fonts.vt, size) }
+        if t:getSize().w <= title_w or size <= P(26) then break end
+        size = math.floor(size * 0.9)
     end
-    local top = ty + inset
+    t:free()
+    t = text(self.title or "", face(Theme.fonts.vt, size), Theme.ink, title_w)
+    local ts = t:getSize()
+    local title_y = cursor - ts.h
+    table.insert(draw, { t, x + side - P(1), title_y })
+    -- percent shares the title's baseline
+    local base = title_y + t:getBaseline()
+    table.insert(draw, { pct, x + W - side - pcs.w, base - pct:getBaseline() })
+    local top = title_y + math.floor(ts.h * 0.15)
     if self.chapter and self.chapter ~= "" then
-        local c = text(self.chapter, face(Theme.fonts.vt, P(18)), muted, inner)
+        local c = text(self.chapter, face(Theme.fonts.vt, P(15)), muted, inner)
         local cs = c:getSize()
-        local cy = top - P(8) - cs.h
+        local cy = top - P(4) - cs.h
         table.insert(draw, { c, x + side, cy })
         top = cy
     end
