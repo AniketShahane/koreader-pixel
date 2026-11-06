@@ -26,9 +26,9 @@ local Theme = {
     -- Font files, relative to KOReader's fonts/ folder.
     fonts = {
         vt    = "pixel/PixelTerm-Regular.ttf",     -- VT323 + pixel arrows/blocks: headings, UI
-        mono  = "pixel/IBMPlexMono-Regular.ttf",   -- body text
-        monoi = "pixel/IBMPlexMono-Italic.ttf",
-        monob = "pixel/IBMPlexMono-SemiBold.ttf",
+        mono  = "pixel/SpaceMono-Regular.ttf",     -- running text in menus and dialogs
+        monoi = "pixel/SpaceMono-Italic.ttf",
+        monob = "pixel/SpaceMono-Bold.ttf",
         space = "pixel/SpaceMono-Regular.ttf",
     },
 

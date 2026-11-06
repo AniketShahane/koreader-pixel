@@ -2,7 +2,7 @@
 The Pixel OPTIONS menu, a game-style pause menu for the reading screen.
 
     ┌──────────── OPTIONS ────────────┐
-    │ ▶ FONT     ◀  plex-mono    ▶    │
+    │ ▶ FONT     ◀  space-mono   ▶    │
     │   SIZE     ◀  ■■■□□        ▶    │
     │   SPACING  ◀  NORMAL       ▶    │
     │ - - - - - - - - - - - - - - - - │
@@ -31,9 +31,9 @@ local px = Theme.px
 -- Reading fonts: crengine family name, label, and the font's natural line
 -- height in em (so spacing can be set in real em, whatever the font).
 local FONTS = {
+    { face = "Space Mono",    label = "space-mono", file = "pixel/SpaceMono-Regular.ttf",   natural = 1.48 },
     { face = "IBM Plex Mono", label = "plex-mono", file = "pixel/IBMPlexMono-Regular.ttf", natural = 1.30 },
     { face = "PixelTerm",     label = "pixelterm", file = "pixel/PixelTerm-Regular.ttf",    natural = 1.00 },
-    { face = "Space Mono",    label = "space-mono", file = "pixel/SpaceMono-Regular.ttf",   natural = 1.48 },
     { face = "Noto Serif",    label = "noto-serif", file = "noto/NotoSerif-Regular.ttf",    natural = 1.36 },
 }
 local SIZES = { 15, 16.5, 18, 19.5, 21 }  -- smaller than the mock-up: easier on a 6" screen

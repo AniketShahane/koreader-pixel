@@ -4,7 +4,7 @@ Restyles KOReader's stock widgets for the Pixel theme.
 Runs once at start-up (from Theme.install, called by reader.lua), after the
 settings and fonts are known but before any widget is built. It changes:
 
-* fonts: UI labels in PixelTerm (VT323), body text in IBM Plex Mono;
+* fonts: UI labels in PixelTerm (VT323), running text in Space Mono;
 * boxes: every rounded frame gets notched "pixel" corners instead;
 * borders: window borders get chunkier;
 * labels: titles and short button labels in capitals;
@@ -37,10 +37,10 @@ local function installFonts(Theme)
     scale.smallinfofontbold = MONO_SCALE
     Font.sizemap.pxui = Font.sizemap.cfont
 
-    -- Real bold for Plex Mono; no fake bold for the pixel font (it smears).
+    -- Real bold for Space Mono; no fake bold for the pixel font (it smears).
     Font.bold_font_variant[mono] = monob
     Font.regular_font_variant[monob] = mono
-    Font.bold_font_variant[Theme.fonts.monoi] = "pixel/IBMPlexMono-BoldItalic.ttf"
+    Font.bold_font_variant[Theme.fonts.monoi] = "pixel/SpaceMono-BoldItalic.ttf"
 
     local orig_getFace = Font.getFace
     local function noLigatures(face)
@@ -195,14 +195,26 @@ end
 
 -- First run with the theme: reading defaults that match the mock-up. Books
 -- you already opened keep their own settings; everything stays changeable.
+-- Space Mono replaced IBM Plex Mono as the default reading font (Nov 2026):
+-- move earlier installs over once, unless the reader picked another font.
+local function migrateFont()
+    if G_reader_settings:isTrue("pixel_font_space_done") then return end
+    local cur = G_reader_settings:readSetting("cre_font")
+    if cur == nil or cur == "IBM Plex Mono" then
+        G_reader_settings:saveSetting("cre_font", "Space Mono")
+        G_reader_settings:saveSetting("copt_line_spacing", 110)
+    end
+    G_reader_settings:makeTrue("pixel_font_space_done")
+end
+
 local function applyDefaults(Theme)
-    if G_reader_settings:isTrue("pixel_defaults_done") then return end
+    if G_reader_settings:isTrue("pixel_defaults_done") then return migrateFont() end
     local Screen = require("device").screen
     local unit = Screen:scaleBySize(1000) / 1000 -- KOReader margins are in scaled px
     local function margin(mockup_px) return math.floor(Theme.px0(mockup_px) / unit + 0.5) end
-    G_reader_settings:saveSetting("cre_font", "IBM Plex Mono")
+    G_reader_settings:saveSetting("cre_font", "Space Mono")
     G_reader_settings:saveSetting("copt_font_size", 18)
-    G_reader_settings:saveSetting("copt_line_spacing", 125)
+    G_reader_settings:saveSetting("copt_line_spacing", 110) -- 1.6 em with Space Mono's tall lines
     G_reader_settings:saveSetting("copt_h_page_margins", { margin(24), margin(24) })
     G_reader_settings:saveSetting("copt_sync_t_b_page_margins", 0)
     G_reader_settings:saveSetting("copt_t_page_margin", margin(44)) -- room for the Pixel header
@@ -216,6 +228,7 @@ local function applyDefaults(Theme)
     G_reader_settings:saveSetting("style_tweaks", tweaks)
     G_reader_settings:saveSetting("screensaver_type", "pixel")
     G_reader_settings:makeTrue("pixel_defaults_done")
+    G_reader_settings:makeTrue("pixel_font_space_done")
 end
 
 function Chrome.install(Theme)

@@ -21,7 +21,7 @@ sentence of that book*.
   title strip and a block progress bar. ALL / READING / DONE / NEW tabs, and a
   bottom bar with BOOKS / RECENT / FIND / OPTIONS. Books with no cover get a
   pixel pattern.
-- **Reading:** IBM Plex Mono text, pixel chapter titles with a dashed rule, a
+- **Reading:** Space Mono text, pixel chapter titles with a dashed rule, a
   header with the title and chapter, and a footer with the page, one square
   per page of the chapter, and minutes left.
 - **Explain:** long-press one word for the normal dictionary, which now has
@@ -37,7 +37,7 @@ sentence of that book*.
   folder's link in `koreader/gdrive_folder.txt`, or set it in
   **Settings > Pixel theme > Google Drive sync**. It only adds books (EPUB, PDF,
   HTML, MOBI, AZW3, FB2, DJVU, CBZ, TXT, DOCX…); it never deletes or overwrites.
-- **Sleep screen:** the title, an 8-bit version of the real cover, the chapter,
+- **Sleep screen:** the cover of the book as big halftone dots that fade into the page, with the title, chapter
   and a progress bar.
 - **Everything else:** pixel fonts, notched corners, pixel icons and capital
   letters on buttons across KOReader's menus and dialogs.
@@ -111,7 +111,7 @@ the Mac simulator and the Kindle package.
 | Path | What |
 |---|---|
 | `pixel/setup.sh`, `run-mac.sh`, `deploy-kindle.sh`, `sync.sh` | download, run, package, overlay |
-| `pixel/fonts/` | PixelTerm (VT323 plus pixel arrows and blocks), IBM Plex Mono, Space Mono, all under the SIL OFL |
+| `pixel/fonts/` | PixelTerm (VT323 plus pixel arrows and blocks), Space Mono, IBM Plex Mono, all under the SIL OFL |
 | `pixel/tools/` | scripts that build the font and the icons |
 | `pixel/dev/` | simulator remote control (`ko tap X Y`, `ko shot file.png`…), dev-only |
 

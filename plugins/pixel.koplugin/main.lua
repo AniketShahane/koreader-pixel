@@ -253,6 +253,21 @@ function Pixel:runExplain(req, anchor_top, word_box, on_close, on_dictionary)
 end
 
 -- Don't leave our pop-ups behind when the book closes.
+-- Books first opened while IBM Plex Mono was the default move to Space Mono
+-- once (a font the reader picked themselves is left alone).
+function Pixel:onReaderReady()
+    local ui = self.ui
+    if not (Theme.active and ui and ui.rolling and ui.font and ui.doc_settings) then return end
+    if ui.doc_settings:isTrue("pixel_font_space_done") then return end
+    ui.doc_settings:makeTrue("pixel_font_space_done")
+    if ui.font.font_face ~= "IBM Plex Mono" then return end
+    local Event = require("ui/event")
+    local Options = require("pixel/options")
+    local sp = Options.SPACINGS[ui.doc_settings:readSetting("pixel_spacing") or 2] or Options.SPACINGS[2]
+    ui:handleEvent(Event:new("SetFont", "Space Mono"))
+    ui:handleEvent(Event:new("SetLineSpace", math.floor(sp[2] / 1.48 * 100 / 5 + 0.5) * 5))
+end
+
 function Pixel:onCloseDocument()
     if self.explain_box and not self.explain_box.closed then
         self.explain_box:onClose()

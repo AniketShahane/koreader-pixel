@@ -1,30 +1,31 @@
 --[[--
-The Pixel sleep screen.
+The Pixel sleep screen ("Fade to paper").
 
-    MOBY DICK
-    HERMAN MELVILLE
-    [the book's cover, turned into chunky 4-grey pixel art]
-    - - - - - - - - - - - - -
-    CH 01 · LOOMINGS          3%
-    ■■□□□□□□□□□□□□□□□□□□
-    ▶ PRESS POWER TO CONTINUE
+The cover of the book you're reading fills the screen as big halftone dots
+that shrink and fade into blank paper toward the bottom. In the white space:
 
-Shows the book you're reading (or last read). If it has no cover, the
-pixel whale from the mock-up stands in.
+    VOL. I · CH 1 · LOOMINGS
+    MOBY
+    DICK
+    HERMAN MELVILLE                38%
+    ███████░░░░░░░░░░░░░░░░░░░░░░
+                         PRESS POWER
+
+Shows the book you're reading (or last read). Without a cover, the pixel
+whale from the mock-up stands in.
 ]]
 
+local Blitbuffer = require("ffi/blitbuffer")
 local BookList = require("ui/widget/booklist")
+local Font = require("ui/font")
 local Geom = require("ui/geometry")
 local Paint = require("pixel/paint")
 local RenderImage = require("ui/renderimage")
-local TextBoxWidget = require("ui/widget/textboxwidget")
 local TextWidget = require("ui/widget/textwidget")
 local Theme = require("pixel/theme")
 local Widget = require("ui/widget/widget")
 local logger = require("logger")
 local Screen = require("device").screen
-
-local px = Theme.px
 
 local WHALE = {
     "......#.#.......",
@@ -37,7 +38,7 @@ local WHALE = {
     ".###########....",
 }
 
-local GREYS = { 0x00, 0x55, 0xAA, 0xFF }
+local DESIGN_W = 450 -- the mock-up's width; everything below is in mock-up px
 
 local SleepScreen = Widget:extend{
     ui = nil,        -- ReaderUI or FileManager
@@ -50,10 +51,12 @@ function SleepScreen:init()
     self.width = self.width or Screen:getWidth()
     self.height = self.height or Screen:getHeight()
     self.dimen = Geom:new{ x = 0, y = 0, w = self.width, h = self.height }
+    self.f = self.width / DESIGN_W
     local ok, err = pcall(self.gather, self)
     if not ok then logger.warn("Pixel sleep screen:", err) end
-    local ok2, art = pcall(self.pixelate, self)
-    self.art = ok2 and art or nil
+    local ok2, dots = pcall(self.halftone, self)
+    if not ok2 then logger.warn("Pixel sleep screen halftone:", dots) end
+    self.dots = ok2 and dots or nil
     if self.image then
         self.image:free()
         self.image = nil
@@ -94,16 +97,24 @@ function SleepScreen:gather()
     self.chapter = chapter or ""
 end
 
--- Downscale the cover to a coarse grid and snap every cell to one of four
--- greys: an 8-bit version of the real cover.
-function SleepScreen:pixelate()
+-- Crop the cover to the screen's shape (a little above centre, where
+-- titles and subjects usually are), shrink it to one value per dot, and
+-- turn each value into a dot radius that also fades toward the bottom.
+function SleepScreen:halftone()
     local bb = self.image
     if not bb then return nil end
-    local cols = 22
-    local w, h = bb:getWidth(), bb:getHeight()
-    if w < 8 or h < 8 then return nil end
-    local rows = math.max(1, math.floor(cols * h / w + 0.5))
-    local small = RenderImage:scaleBlitBuffer(bb, cols, rows, false)
+    local W, H = self.width, self.height
+    local iw, ih = bb:getWidth(), bb:getHeight()
+    if iw < 8 or ih < 8 then return nil end
+    local cell = math.max(6, math.floor(7 * self.f + 0.5))
+    local cols, rows = math.ceil(W / cell), math.ceil(H / cell)
+    -- cover-fit crop
+    local cw, ch = iw, math.floor(iw * H / W + 0.5)
+    if ch > ih then ch = ih; cw = math.floor(ih * W / H + 0.5) end
+    local cx = math.floor((iw - cw) / 2)
+    local cy = math.floor((ih - ch) * 0.4)
+    local view = bb:viewport(cx, cy, cw, ch)
+    local small = RenderImage:scaleBlitBuffer(view, cols, rows, false)
     local vals, lo, hi = {}, 255, 0
     for y = 0, rows - 1 do
         for x = 0, cols - 1 do
@@ -113,122 +124,175 @@ function SleepScreen:pixelate()
             if v > hi then hi = v end
         end
     end
-    if small ~= bb then small:free() end
-    -- Stretch the contrast so faded covers still read, then snap to 4 greys.
+    if small ~= view then small:free() end
     local range = math.max(1, hi - lo)
-    local grid = {}
+    local radii = {}
+    local rmax = cell * 0.72
     for y = 0, rows - 1 do
-        local row = {}
         for x = 0, cols - 1 do
-            local v = (vals[y * cols + x] - lo) * 255 / range
-            row[x + 1] = GREYS[math.max(1, math.min(4, math.floor(v / 64) + 1))]
+            local v = (vals[y * cols + x] - lo) / range
+            radii[y * cols + x] = (1 - v) ^ 0.9 * rmax
         end
-        grid[y + 1] = row
     end
-    return { cols = cols, rows = rows, grid = grid }
+    return { cell = cell, cols = cols, rows = rows, radii = radii }
 end
 
-local function text(str, face, color, max_width)
-    return TextWidget:new{ text = str, face = face, fgcolor = color or Theme.ink, max_width = max_width }
+-- A filled disc made of horizontal runs (spans cached per radius).
+local spans = {}
+local function disc(bb, cx, cy, r, color)
+    if r <= 0 then return end
+    local s = spans[r]
+    if not s then
+        s = {}
+        for dy = -r, r do s[dy] = math.floor(math.sqrt(r * r - dy * dy) + 0.5) end
+        spans[r] = s
+    end
+    for dy = -r, r do
+        local half = s[dy]
+        bb:paintRect(cx - half, cy + dy, 2 * half + 1, 1, color)
+    end
+end
+
+-- A face at a size in device px (not scaled by the interface size dial).
+local function face(file, device_px)
+    return Font:getFace(file, device_px / (Screen:scaleBySize(1000) / 1000))
+end
+
+local function text(str, fc, color, max_width)
+    return TextWidget:new{ text = str, face = fc, fgcolor = color or Theme.ink, max_width = max_width }
+end
+
+-- Greedy word wrap of the title in the big pixel font; shrinks the size
+-- until it fits in three lines and every word fits the width.
+local function wrapTitle(title, width, size)
+    local words = {}
+    for w in title:gmatch("%S+") do table.insert(words, w) end
+    if #words == 0 then words = { "KOREADER" } end
+    -- Short titles stack one word per line ("MOBY / DICK"), as big as fits.
+    if #words <= 3 then
+        local sz = size
+        for _ = 1, 12 do
+            local fc = face(Theme.fonts.vt, sz)
+            local fits = true
+            for _, w in ipairs(words) do
+                local t = TextWidget:new{ text = w, face = fc }
+                if t:getSize().w > width then fits = false end
+                t:free()
+            end
+            if fits then return words, fc, sz end
+            sz = math.floor(sz * 0.88)
+        end
+    end
+    for _ = 1, 12 do
+        local fc = face(Theme.fonts.vt, size)
+        local function wid(s)
+            local t = TextWidget:new{ text = s, face = fc }
+            local v = t:getSize().w
+            t:free()
+            return v
+        end
+        local lines, cur, ok = {}, nil, true
+        for _, w in ipairs(words) do
+            if wid(w) > width then ok = false break end
+            local try = cur and (cur .. " " .. w) or w
+            if cur and wid(try) > width then
+                table.insert(lines, cur); cur = w
+            else
+                cur = try
+            end
+        end
+        if cur then table.insert(lines, cur) end
+        if ok and #lines <= 3 then return lines, fc, size end
+        size = math.floor(size * 0.85)
+    end
+    return { title }, face(Theme.fonts.vt, size), size
 end
 
 function SleepScreen:paintTo(bb, x, y)
-    local W, H = self.width, self.height
+    local W, H, f = self.width, self.height, self.f
+    local function P(n) return math.max(1, math.floor(n * f + 0.5)) end
     bb:paintRect(x, y, W, H, Theme.paper)
-    local side = px(40)
+
+    -- Lay out the text block bottom-up first, so the dots can fade out above it.
+    local side = P(26)
     local inner = W - 2 * side
+    local muted = Blitbuffer.Color8(0x55)
+    local draw = {}
 
-    -- Bottom-up anchors first: prompt, then the progress block above it
-    local prompt = text("▶ PRESS POWER TO CONTINUE", Theme.face("vt", 26))
+    local prompt = text("PRESS POWER", face(Theme.fonts.vt, P(18)), muted)
     local ps = prompt:getSize()
-    local prompt_y = y + H - px(48) - ps.h
-    prompt:paintTo(bb, x + math.floor((W - ps.w) / 2), prompt_y)
-    prompt:free()
+    local py = y + H - P(26) - ps.h
+    table.insert(draw, { prompt, x + W - side - ps.w, py })
 
-    local bar_h = px(14)
-    local bar_y = prompt_y - px(44) - bar_h
-    local row_face = Theme.face("vt", 22)
-    local pct = text(math.floor(self.percent * 100 + 0.5) .. "%", row_face)
+    local bar_h = P(6)
+    local bar_y = py - P(8) - bar_h
+
+    local pct = text(math.floor(self.percent * 100 + 0.5) .. "%", face(Theme.fonts.vt, P(22)))
     local pcs = pct:getSize()
-    local chap = text(self.chapter or "", row_face, Theme.ink, inner - pcs.w - px(12))
-    local row_y = bar_y - px(6) - pcs.h
-    chap:paintTo(bb, x + side, row_y)
-    pct:paintTo(bb, x + W - side - pcs.w, row_y)
-    chap:free(); pct:free()
-
-    local segs, gap = 20, px(3)
-    local seg_w = math.floor((inner - (segs - 1) * gap) / segs)
-    local filled = math.floor(self.percent * segs + 0.5)
-    if self.percent > 0 and filled == 0 then filled = 1 end
-    for i = 1, segs do
-        local sx = x + side + (i - 1) * (seg_w + gap)
-        if i <= filled then
-            bb:paintRect(sx, bar_y, seg_w, bar_h, Theme.ink)
-        else
-            local b = px(2)
-            bb:paintRect(sx, bar_y, seg_w, b, Theme.ink)
-            bb:paintRect(sx, bar_y + bar_h - b, seg_w, b, Theme.ink)
-            bb:paintRect(sx, bar_y, b, bar_h, Theme.ink)
-            bb:paintRect(sx + seg_w - b, bar_y, b, bar_h, Theme.ink)
-        end
-    end
-
-    local dots_y = row_y - px(20) - px(12)
-    Paint.dashes(bb, x + side, dots_y, inner, px(12), px(6), px(6), Theme.soft)
-
-    -- Top-down: title (up to two lines), authors
-    local title = TextBoxWidget:new{
-        text = self.title or "", face = Theme.face("vt", 60), width = W - 2 * px(24),
-        alignment = "center", line_height = -0.1, height = px(60) * 2, height_adjust = true,
-        height_overflow_show_ellipsis = true,
-    }
-    local ty = y + px(40)
-    title:paintTo(bb, x + px(24), ty)
-    local th = title:getSize().h
-    title:free()
-    local auth_y = ty + th + px(4)
-    local auth_h = 0
+    local row_y = bar_y - P(8) - pcs.h
+    table.insert(draw, { pct, x + W - side - pcs.w, row_y })
     if self.authors and self.authors ~= "" then
-        local a = text(self.authors, Theme.face("vt", 20), Theme.muted, inner)
+        local a = text(self.authors, face(Theme.fonts.mono, P(10)), Theme.ink, inner - pcs.w - P(12))
         local as = a:getSize()
-        a:paintTo(bb, x + math.floor((W - as.w) / 2), auth_y)
-        auth_h = as.h
-        a:free()
+        table.insert(draw, { a, x + side, row_y + pcs.h - as.h - P(2) })
     end
 
-    -- The art fills what's left between the authors and the dashed line
-    local top = auth_y + auth_h + px(18)
-    local bottom = dots_y - px(18)
-    local avail_h, avail_w = bottom - top, inner
-    if self.art then
-        local a = self.art
-        local cell = math.max(2, math.floor(math.min(avail_w / a.cols, avail_h / a.rows)))
-        local aw, ah = cell * a.cols, cell * a.rows
-        local ax = x + math.floor((W - aw) / 2)
-        local ay = top + math.floor((avail_h - ah) / 2)
-        for r = 1, a.rows do
-            local row = a.grid[r]
-            local c = 1
-            while c <= a.cols do
-                local v = row[c]
-                local s = c
-                while c <= a.cols and row[c] == v do c = c + 1 end
-                if v ~= 0xFF then
-                    bb:paintRect(ax + (s - 1) * cell, ay + (r - 1) * cell, (c - s) * cell, cell, require("ffi/blitbuffer").Color8(v))
+    local lines, tface, tsize = wrapTitle(self.title or "", inner, P(92))
+    local step = math.floor(tsize * 0.8 + 0.5)
+    local first = TextWidget:new{ text = lines[1], face = tface }
+    local lh = first:getSize().h
+    first:free()
+    local inset = math.floor(lh * 0.12) -- the pixel font has empty space above its capitals
+    local ty = row_y - P(4) - lh - (#lines - 1) * step + inset
+    for i, line in ipairs(lines) do
+        table.insert(draw, { text(line, tface), x + side - P(2), ty + (i - 1) * step })
+    end
+    local top = ty + inset
+    if self.chapter and self.chapter ~= "" then
+        local c = text(self.chapter, face(Theme.fonts.vt, P(18)), muted, inner)
+        local cs = c:getSize()
+        local cy = top - P(8) - cs.h
+        table.insert(draw, { c, x + side, cy })
+        top = cy
+    end
+    top = top - P(10)
+
+    -- The cover as dots, shrinking to nothing just above the text
+    local d = self.dots
+    if d then
+        local c = d.cell
+        local fade_end = math.max(c, top - y)
+        for r = 0, d.rows - 1 do
+            local cyp = r * c + math.floor(c / 2)
+            local t = math.min(1, cyp / fade_end)
+            local fade = math.min(1, 1.6 * (1 - t) ^ 0.7) -- holds most of the picture, then melts
+            if fade > 0 then
+                for col = 0, d.cols - 1 do
+                    local rad = d.radii[r * d.cols + col] * fade
+                    if rad >= 0.6 then
+                        disc(bb, x + col * c + math.floor(c / 2), y + cyp, math.floor(rad + 0.5), Theme.ink)
+                    end
                 end
             end
         end
-        local B = px(4)
-        Paint.notchedBorder(bb, ax - B - px(4), ay - B - px(4), aw + 2 * (B + px(4)), ah + 2 * (B + px(4)), B, Theme.ink, B)
     else
-        local cell = math.max(2, math.min(px(12), math.floor(math.min(avail_w / 16, avail_h / 8))))
-        local aw, ah = cell * 16, cell * 8
-        Paint.bitmap(bb, x + math.floor((W - aw) / 2), top + math.floor((avail_h - ah) / 2), WHALE, cell, Theme.ink)
+        local cell = P(14)
+        Paint.bitmap(bb, x + math.floor((W - cell * 16) / 2), y + P(90), WHALE, cell, Theme.ink)
+    end
+
+    -- Progress bar, then the text
+    bb:paintRect(x + side, bar_y, inner, bar_h, Blitbuffer.Color8(0xDD))
+    local fill = math.floor(inner * self.percent + 0.5)
+    if self.percent > 0 and fill < P(2) then fill = P(2) end
+    if fill > 0 then bb:paintRect(x + side, bar_y, fill, bar_h, Theme.ink) end
+    for _, it in ipairs(draw) do
+        it[1]:paintTo(bb, it[2], it[3])
+        it[1]:free()
     end
 end
 
 function SleepScreen:onCloseWidget()
-    self.art = nil
+    self.dots = nil
 end
 
 return SleepScreen
