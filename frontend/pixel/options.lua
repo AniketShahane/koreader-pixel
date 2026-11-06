@@ -32,6 +32,7 @@ local px = Theme.px
 -- height in em (so spacing can be set in real em, whatever the font).
 local FONTS = {
     { face = "Space Mono",    label = "space-mono", file = "pixel/SpaceMono-Regular.ttf",   natural = 1.48 },
+    { face = "DM Mono",       label = "dm-mono",    file = "pixel/DMMono-Regular.ttf",      natural = 1.30 },
     { face = "IBM Plex Mono", label = "plex-mono", file = "pixel/IBMPlexMono-Regular.ttf", natural = 1.30 },
     { face = "PixelTerm",     label = "pixelterm", file = "pixel/PixelTerm-Regular.ttf",    natural = 1.00 },
     { face = "Noto Serif",    label = "noto-serif", file = "noto/NotoSerif-Regular.ttf",    natural = 1.36 },

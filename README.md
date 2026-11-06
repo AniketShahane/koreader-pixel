@@ -111,7 +111,7 @@ the Mac simulator and the Kindle package.
 | Path | What |
 |---|---|
 | `pixel/setup.sh`, `run-mac.sh`, `deploy-kindle.sh`, `sync.sh` | download, run, package, overlay |
-| `pixel/fonts/` | PixelTerm (VT323 plus pixel arrows and blocks), Space Mono, IBM Plex Mono, all under the SIL OFL |
+| `pixel/fonts/` | PixelTerm (VT323 plus pixel arrows and blocks), Space Mono, DM Mono, IBM Plex Mono, all under the SIL OFL |
 | `pixel/tools/` | scripts that build the font and the icons |
 | `pixel/dev/` | simulator remote control (`ko tap X Y`, `ko shot file.png`…), dev-only |
 
