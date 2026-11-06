@@ -24,6 +24,7 @@ local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local logger = require("logger")
 local util = require("util")
 local _ = require("gettext")
+local T = require("ffi/util").template
 local Screen = require("device").screen
 
 local Pixel = WidgetContainer:extend{
@@ -330,6 +331,33 @@ function Pixel:editKey(touchmenu_instance)
     dialog:onShowKeyboard()
 end
 
+function Pixel:editDriveFolder(touchmenu_instance)
+    local dialog
+    dialog = InputDialog:new{
+        title = _("Google Drive folder link"),
+        description = _("Share the folder as \"Anyone with the link\", then paste its link (or ID). You can also put it in koreader/gdrive_folder.txt."),
+        input = G_reader_settings:readSetting("pixel_gdrive_folder") or "",
+        buttons = {{
+            { text = _("Cancel"), id = "close", callback = function() UIManager:close(dialog) end },
+            { text = _("Save"), is_enter_default = true, callback = function()
+                local v = util.trim(dialog:getInputText() or "")
+                if v == "" then
+                    G_reader_settings:delSetting("pixel_gdrive_folder")
+                elseif require("pixel/drive").parseFolderId(v) then
+                    G_reader_settings:saveSetting("pixel_gdrive_folder", v)
+                else
+                    UIManager:show(InfoMessage:new{ text = _("That doesn't look like a Drive folder link.") })
+                    return
+                end
+                UIManager:close(dialog)
+                if touchmenu_instance then touchmenu_instance:updateItems() end
+            end },
+        }},
+    }
+    UIManager:show(dialog)
+    dialog:onShowKeyboard()
+end
+
 function Pixel:addToMainMenu(menu_items)
     local Claude = require("pixel/claude")
     local function toggle(key, after)
@@ -392,6 +420,23 @@ function Pixel:addToMainMenu(menu_items)
                             Cache.clear()
                             UIManager:show(InfoMessage:new{ text = _("Saved explanations cleared."), timeout = 2 })
                         end,
+                    },
+                },
+            },
+            {
+                text = _("Google Drive sync"),
+                sub_item_table = {
+                    {
+                        text = _("Sync now"),
+                        callback = function() require("pixel/drive").syncInteractive(self.ui.file_chooser and self.ui or nil) end,
+                    },
+                    {
+                        text_func = function()
+                            local id = require("pixel/drive").getFolderId()
+                            return id and T(_("Folder: %1…"), id:sub(1, 10)) or _("Folder link: not set")
+                        end,
+                        keep_menu_open = true,
+                        callback = function(touchmenu_instance) self:editDriveFolder(touchmenu_instance) end,
                     },
                 },
             },

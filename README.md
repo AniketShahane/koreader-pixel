@@ -32,6 +32,11 @@ sentence of that book*.
   **Settings > Pixel theme > Explain with Claude > Use Claude for single words too**.
 - **OPTIONS** (tap the page number bar at the bottom): font, size and spacing with ◀ ▶ (SIZE scales the menus and library too),
   plus CONTENTS / BOOKMARKS / SEARCH. ALL SETTINGS opens KOReader's full panel.
+- **Google Drive sync:** tap **SYNC** in the library bar to download new books
+  from one Google Drive folder (shared as "Anyone with the link"). Put the
+  folder's link in `koreader/gdrive_folder.txt`, or set it in
+  **Settings > Pixel theme > Google Drive sync**. It only adds books (EPUB, PDF,
+  HTML, MOBI, AZW3, FB2, DJVU, CBZ, TXT, DOCX…); it never deletes or overwrites.
 - **Sleep screen:** the title, an 8-bit version of the real cover, the chapter,
   and a progress bar.
 - **Everything else:** pixel fonts, notched corners, pixel icons and capital

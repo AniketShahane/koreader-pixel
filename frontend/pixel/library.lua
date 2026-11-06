@@ -6,7 +6,7 @@ Three parts, all drawn by hand so they match the mock-up exactly:
 * Header  - "▶ LIBRARY", a book count, and ALL / READING / DONE / NEW tabs.
             Replaces the file manager's title bar (same methods, so the
             file manager doesn't notice).
-* NavBar  - the black bar at the bottom: BOOKS / RECENT / FIND / OPTIONS.
+* NavBar  - the black bar at the bottom: BOOKS / RECENT / FIND / SYNC / OPTIONS.
 * Tile    - one book: its cover in a notched pixel frame, a title strip,
             and a block progress bar underneath. Books without a cover get
             one of the mock-up's ten pixel patterns, picked from the title.
@@ -248,6 +248,7 @@ function NavBar:init()
         { id = "books",   label = "BOOKS",   cb = function() fm:onHome() end },
         { id = "recent",  label = "RECENT",  cb = function() fm.history:onShowHist() end },
         { id = "find",    label = "FIND",    cb = function() fm.filesearcher:onShowFileSearch() end },
+        { id = "sync",    label = "SYNC",    cb = function() require("pixel/drive").syncInteractive(fm) end },
         { id = "options", label = "OPTIONS", cb = function() fm.menu:onShowMenu() end },
     }
     self.ges_events = {
