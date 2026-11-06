@@ -371,8 +371,8 @@ function Tile:paintTo(bb, x, y)
         end
     end
 
-    -- File-type tag, top-left of the cover
-    if self.ext then
+    -- File-type tag, only on pattern placeholders (never over a real cover)
+    if self.ext and not self.cover_bb then
         local tag = text(self.ext, Theme.face("vt", 14), Theme.paper)
         local s = tag:getSize()
         local tx, ty, th = cx + px(4), cy + px(4), px(15)
