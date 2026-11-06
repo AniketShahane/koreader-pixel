@@ -27,6 +27,7 @@ local Screen = Device.screen
 local getMenuText = require("ui/widget/menu").getMenuText
 
 local BookInfoManager = require("bookinfomanager")
+local Pixel = require("pixel/theme")
 
 -- Here is the specific UI implementation for "mosaic" display modes
 -- (see covermenu.lua for the generic code)
@@ -371,6 +372,9 @@ function MosaicMenuItem:init()
 end
 
 function MosaicMenuItem:update()
+    if Pixel.active then -- Pixel theme draws its own tiles
+        return require("pixel/library").updateMosaicItem(self, BookInfoManager)
+    end
     -- We will be a distinctive widget whether we are a directory,
     -- a known file with image / without image, or a not yet known file
     local widget
@@ -635,6 +639,7 @@ function MosaicMenuItem:paintTo(bb, x, y)
 
     -- Original painting
     InputContainer.paintTo(self, bb, x, y)
+    if Pixel.active then return end -- the Pixel tile already shows status and progress
 
     -- to which we paint over the shortcut icon
     if self.shortcut_icon then
@@ -808,7 +813,7 @@ function MosaicMenu:_recalculateDimen()
     end
 
     -- Set our items target size
-    self.item_margin = Screen:scaleBySize(10)
+    self.item_margin = Pixel.active and Pixel.px(12) or Screen:scaleBySize(10)
     self.item_height = math.floor((self.inner_dimen.h - self.others_height - (1+self.nb_rows)*self.item_margin) / self.nb_rows)
     self.item_width = math.floor((self.inner_dimen.w - (1+self.nb_cols)*self.item_margin) / self.nb_cols)
     self.item_dimen = Geom:new{

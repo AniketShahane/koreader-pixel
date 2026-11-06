@@ -1,104 +1,108 @@
-[![KOReader](https://raw.githubusercontent.com/koreader/koreader.github.io/master/koreader-logo.png)](https://koreader.rocks)
+# KOReader Pixel
 
-#### KOReader is a document viewer primarily aimed at e-ink readers.
+A fork of [KOReader](https://github.com/koreader/koreader) (the free, open-source
+e-book reader for Kindle, Kobo and more) with a retro game-terminal look, and
+**Explain**: long-press any word and Claude tells you what it means *in that
+sentence of that book*.
 
-[![AGPL Licence][badge-license]](COPYING)
-[![Latest release][badge-release]][link-gh-releases]
-[![Gitter][badge-gitter]][link-gitter]
-[![Mobileread][badge-mobileread]][link-forum]
-[![Build Status][badge-circleci]][link-circleci]
-[![Coverage Status][badge-coverage]][link-coverage]
-[![Weblate Status][badge-weblate]][link-weblate]
+| Library | Reading | Explain | Options | Sleep |
+|---|---|---|---|---|
+| ![Library](pixel/screenshots/library.png) | ![Reading](pixel/screenshots/reading.png) | ![Explain](pixel/screenshots/explain.png) | ![Options](pixel/screenshots/options.png) | ![Sleep screen](pixel/screenshots/sleep.png) |
 
-[Download](https://github.com/koreader/koreader/releases) •
-[User guide](http://koreader.rocks/user_guide/) •
-[Wiki](https://github.com/koreader/koreader/wiki) •
-[Developer docs](http://koreader.rocks/doc/)
+*Screenshots from the Mac simulator at Kindle Paperwhite resolution.*
 
-## Main features
+> **Status:** tested in the Mac simulator only, not yet on a real Kindle.
+> Based on KOReader nightly `v2026.07.2-311` (commit `4102790`). The original
+> KOReader README is in [README.koreader.md](README.koreader.md).
 
-* **portable**: runs on embedded devices (Cervantes, Kindle, Kobo, PocketBook, reMarkable), Android and Linux computers. Developers can run a KOReader emulator in Linux and MacOS.
+## What it changes
 
-* **multi-format documents**: supports fixed page formats (PDF, DjVu, CBT, CBZ) and reflowable e-book formats (EPUB, FB2, Mobi, DOC, RTF, HTML, CHM, TXT). Scanned PDF/DjVu documents can also be reflowed with the built-in K2pdfopt library. [ZIP files][link-wiki-zip] are also supported for some formats.
+- **Library:** book covers in rows of 3, each in a notched pixel frame with a
+  title strip and a block progress bar. ALL / READING / DONE / NEW tabs, and a
+  bottom bar with BOOKS / RECENT / FIND / OPTIONS. Books with no cover get a
+  pixel pattern.
+- **Reading:** IBM Plex Mono text, pixel chapter titles with a dashed rule, a
+  header with the title and chapter, and a footer with the page, one square
+  per page of the chapter, and minutes left.
+- **Explain:** long-press a word. A "CLAUDE" box shows MEANING / HERE / DEEPER
+  and two related words you can tap. DICT opens the normal dictionary. To
+  explain a phrase, select several words and pick **Explain**.
+- **OPTIONS** (tap the bottom of the page): font, size and spacing with ◀ ▶,
+  plus CONTENTS / BOOKMARKS / SEARCH. ALL SETTINGS opens KOReader's full panel.
+- **Sleep screen:** the title, an 8-bit version of the real cover, the chapter,
+  and a progress bar.
+- **Everything else:** pixel fonts, notched corners, pixel icons and capital
+  letters on buttons across KOReader's menus and dialogs.
 
-* **full-featured reading**: multi-lingual user interface with a highly customizable reader view and many typesetting options. You can set arbitrary page margins, override line spacing and choose external fonts and styles. It has multi-lingual hyphenation dictionaries bundled into the application.
+Every part can be switched off in **Settings > Pixel theme**.
 
-* **integrated** with *calibre* (search metadata, receive ebooks wirelessly, browse library via OPDS), *Wallabag*, *Wikipedia*, *Google Translate* and other content providers.
+## Try it on a Mac (Apple Silicon)
 
-* **optimized for e-ink devices**: custom UI without animation, with paginated menus, adjustable text contrast, and easy zoom to fit content or page in paged media.
+```sh
+git clone https://github.com/AniketShahane/koreader-pixel.git
+cd koreader-pixel
+pixel/setup.sh      # downloads the matching KOReader builds + a few free books
+pixel/run-mac.sh
+```
 
-* **extensible**: via plugins
+- click = tap, click and hold = long-press, drag = swipe
+- **F2** = power button (sleep screen), Page Up / Page Down = turn pages
+- tap the top of a page for the menu, the bottom for OPTIONS
 
-* **fast**: on some older devices, it has been measured to have less than half the page-turn delay as the built in reading software.
+For Explain, run `export ANTHROPIC_API_KEY=sk-ant-...` first, or add a key in
+**Settings > Pixel theme > Explain with Claude**.
 
-* **and much more**: look up words with StarDict dictionaries / Wikipedia, add your own online OPDS catalogs and RSS feeds, over-the-air software updates, an FTP client, an SSH server, …
+## Put it on a Kindle
 
-Please check the [user guide](http://koreader.rocks/user_guide/) and the [wiki][link-wiki] to discover more features and to help us document them.
+You need a jailbroken Kindle with KUAL and MRPI (see <https://kindlemodding.org>).
 
-## Screenshots
+1. Download `koreader-pixel-kindlehf.zip` (firmware 5.16.3 or newer) or
+   `koreader-pixel-kindlepw2.zip` (older firmware) from
+   [Releases](https://github.com/AniketShahane/koreader-pixel/releases).
+   You can also build them yourself: `pixel/deploy-kindle.sh` or `pixel/deploy-kindle.sh pw2`.
+2. Unzip it onto the Kindle's root folder over USB (it adds `koreader/` and
+   `extensions/`). Or plug the Kindle in and run `pixel/deploy-kindle.sh hf /Volumes/Kindle`.
+3. On the Kindle, open **KUAL > KOReader**.
+4. For Explain, put a text file named `claude_api_key.txt`, containing only
+   your key, in the `koreader` folder on the Kindle.
+5. Add **DRM-free** books (EPUB etc.) to `documents`. Books bought from Amazon are locked and won't open.
 
-<a href="https://github.com/koreader/koreader-artwork/raw/master/koreader-menu.png"><img src="https://github.com/koreader/koreader-artwork/raw/master/koreader-menu-thumbnail.png" alt="" width="200px"></a>
-<a href="https://github.com/koreader/koreader-artwork/raw/master/koreader-footnotes.png"><img src="https://github.com/koreader/koreader-artwork/raw/master/koreader-footnotes-thumbnail.png" alt="" width="200px"></a>
-<a href="https://github.com/koreader/koreader-artwork/raw/master/koreader-dictionary.png"><img src="https://github.com/koreader/koreader-artwork/raw/master/koreader-dictionary-thumbnail.png" alt="" width="200px"></a>
+## Explain and Claude
 
-## Installation
+- Each new word is one request to the Claude API: Claude Opus 5.5 by default,
+  effort "low", answering as JSON that follows a fixed schema. You can switch to
+  Sonnet 5.5 or Haiku 5.5 in the menu.
+- Answers are saved per book and word, so looking a word up again is free and
+  works offline.
+- Requests send `fallbacks: "default"`: if a model declines, another one answers.
+- Your key is read from `ANTHROPIC_API_KEY`, then from the settings, then from
+  `koreader/claude_api_key.txt`.
 
-Please follow the model specific steps for your device:
+## How it's built
 
-[Android](https://github.com/koreader/koreader/wiki/Installation-on-Android-devices) •
-[Cervantes](https://github.com/koreader/koreader/wiki/Installation-on-BQ-devices) •
-[Kindle](https://github.com/koreader/koreader/wiki/Installation-on-Kindle-devices) •
-[Kobo](https://github.com/koreader/koreader/wiki/Installation-on-Kobo-devices) •
-[Linux](https://github.com/koreader/koreader/wiki/Installation-on-desktop-linux) •
-[Pocketbook](https://github.com/koreader/koreader/wiki/Installation-on-PocketBook-devices) •
-[reMarkable](https://github.com/koreader/koreader/wiki/Installation-on-Remarkable)
+All new code is in [`frontend/pixel/`](frontend/pixel) and
+[`plugins/pixel.koplugin/`](plugins/pixel.koplugin). A few small hooks go into
+stock files:
 
+- `reader.lua`
+- `frontend/apps/filemanager/filemanager.lua`
+- `plugins/coverbrowser.koplugin/{main,mosaicmenu}.lua`
+- `frontend/ui/screensaver.lua` and `frontend/ui/elements/screensaver_menu.lua`
+- `frontend/ui/data/css_tweaks.lua`
+- `frontend/ui/elements/*_menu_order.lua`
+- pixel icons in `resources/icons/mdlight/`
 
-## Development
+The scripts don't compile anything. They lay these Lua files over an official
+KOReader build of the **same** version (kept in the `base-…` release), for both
+the Mac simulator and the Kindle package.
 
-[Setting up a build environment](doc/Building.md) •
-[Collaborating with Git](doc/Collaborating_with_Git.md) •
-[Building targets](doc/Building_targets.md) •
-[Porting](doc/Porting.md) •
-[Developer docs](http://koreader.rocks/doc/)
+| Path | What |
+|---|---|
+| `pixel/setup.sh`, `run-mac.sh`, `deploy-kindle.sh`, `sync.sh` | download, run, package, overlay |
+| `pixel/fonts/` | PixelTerm (VT323 plus pixel arrows and blocks), IBM Plex Mono, Space Mono, all under the SIL OFL |
+| `pixel/tools/` | scripts that build the font and the icons |
+| `pixel/dev/` | simulator remote control (`ko tap X Y`, `ko shot file.png`…), dev-only |
 
-## Support
+## License
 
-KOReader is developed and supported by volunteers all around the world. There are many ways you can help:
-
-- [fix bugs][link-issues-bugs] and [implement new features][link-issues-features]
-- [translate the program into your language][link-weblate] or improve an existing translation
-- document lesser-known features on the [wiki][link-wiki]
-- help others with your knowledge on the [forum][link-forum]
-
-Right now we only support [liberapay](https://liberapay.com/KOReader) donations.
-
-## Contributors
-
-[![Last commit][badge-last-commit]][link-gh-commits]
-[![Commit activity][badge-commit-activity]][link-gh-insights]
-
-[badge-bountysource]:https://img.shields.io/bountysource/team/koreader/activity?color=red
-[badge-circleci]:https://circleci.com/gh/koreader/koreader.svg?style=shield
-[badge-coverage]:https://codecov.io/gh/koreader/koreader/branch/master/graph/badge.svg
-[badge-commit-activity]:https://img.shields.io/github/commit-activity/m/koreader/koreader
-[badge-gitter]:https://img.shields.io/gitter/room/koreader/koreader?color=red
-[badge-last-commit]:https://img.shields.io/github/last-commit/koreader/koreader?color=orange
-[badge-license]:https://img.shields.io/github/license/koreader/koreader
-[badge-release]:https://img.shields.io/github/release/koreader/koreader.svg
-[badge-mobileread]:https://img.shields.io/badge/forum-on_mobileread-lightgrey
-[badge-weblate]:https://hosted.weblate.org/widgets/koreader/-/koreader/svg-badge.svg
-
-[link-bountysource]:https://www.bountysource.com/teams/koreader
-[link-circleci]:https://circleci.com/gh/koreader/koreader
-[link-coverage]:https://codecov.io/gh/koreader/koreader
-[link-forum]:http://www.mobileread.com/forums/forumdisplay.php?f=276
-[link-gh-commits]:https://github.com/koreader/koreader/commits/master
-[link-gh-insights]:https://github.com/koreader/koreader/pulse
-[link-gh-releases]:https://github.com/koreader/koreader/releases
-[link-gitter]:https://gitter.im/koreader/koreader
-[link-issues-bugs]:https://github.com/koreader/koreader/issues?q=is%3Aopen+is%3Aissue+label%3Abug
-[link-issues-features]:https://github.com/koreader/koreader/issues?q=is%3Aopen+is%3Aissue+label%3Aenhancement
-[link-weblate]:https://hosted.weblate.org/engage/koreader/?utm_source=widget
-[link-wiki]:https://github.com/koreader/koreader/wiki
-[link-wiki-zip]:https://github.com/koreader/koreader/wiki/ZIP
+AGPL-3.0, like KOReader (see [COPYING](COPYING)). The fonts are under the SIL Open Font License.

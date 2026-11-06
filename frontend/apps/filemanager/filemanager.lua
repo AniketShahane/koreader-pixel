@@ -33,6 +33,7 @@ local ReadHistory = require("readhistory")
 local Screenshoter = require("ui/widget/screenshoter")
 local TitleBar = require("ui/widget/titlebar")
 local UIManager = require("ui/uimanager")
+local VerticalGroup = require("ui/widget/verticalgroup")
 local ffiUtil = require("ffi/util")
 local filemanagerutil = require("apps/filemanager/filemanagerutil")
 local lfs = require("libs/libkoreader-lfs")
@@ -115,6 +116,13 @@ FileManager.onPathChanged = FileManager.updateTitleBarPath
 
 function FileManager:setupLayout()
     self.show_parent = self.show_parent or self
+    local Pixel = require("pixel/theme")
+    if Pixel.active then
+        -- Pixel theme: our own header (same API as TitleBar) and a bottom nav bar
+        local PixelLibrary = require("pixel/library")
+        self.title_bar = PixelLibrary.Header:new{ fm = self, show_parent = self.show_parent, title = self.title }
+        self.pixel_navbar = PixelLibrary.NavBar:new{ fm = self }
+    else
     self.title_bar = TitleBar:new{
         show_parent = self.show_parent,
         fullscreen = "true",
@@ -134,9 +142,11 @@ function FileManager:setupLayout()
         right_icon_tap_callback = function() self:onShowPlusMenu() end,
         right_icon_hold_callback = false, -- propagate long-press to dispatcher
     }
+    end
 
     local file_chooser = FileChooser:new{
         name = "filemanager",
+        height = self.pixel_navbar and (Screen:getHeight() - self.pixel_navbar:getSize().h) or nil,
         path = self.root_path,
         focused_path = self.focused_file,
         show_parent = self.show_parent,
@@ -347,7 +357,7 @@ function FileManager:setupLayout()
         padding = 0,
         bordersize = 0,
         background = Blitbuffer.COLOR_WHITE,
-        file_chooser,
+        self.pixel_navbar and VerticalGroup:new{ file_chooser, self.pixel_navbar } or file_chooser,
     }
 
     self[1] = fm_ui

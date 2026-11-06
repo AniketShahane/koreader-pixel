@@ -184,6 +184,9 @@ if fontmap ~= nil then
     end
 end
 
+-- Pixel theme: restyle the UI before any widget gets built
+require("pixel/theme").install()
+
 local UIManager = require("ui/uimanager")
 
 -- Apply developer patches

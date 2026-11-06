@@ -95,6 +95,16 @@ function CoverBrowser:init()
         G_reader_settings:makeTrue("coverbrowser_initial_default_setup_done")
     end
 
+    -- Pixel theme: start with the cover wall (3 x 2 posters per page), once
+    if require("pixel/theme").active and not G_reader_settings:isTrue("pixel_library_setup_done") then
+        BookInfoManager:saveSetting("filemanager_display_mode", "mosaic_image")
+        BookInfoManager:saveSetting("history_display_mode", "mosaic_image")
+        BookInfoManager:saveSetting("nb_cols_portrait", 3)
+        BookInfoManager:saveSetting("nb_rows_portrait", 2)
+        G_reader_settings:makeTrue("lock_home_folder") -- a library, not a file browser: no "../" tile
+        G_reader_settings:makeTrue("pixel_library_setup_done")
+    end
+
     self:setupFileManagerDisplayMode(BookInfoManager:getSetting("filemanager_display_mode"))
     CoverBrowser.setupWidgetDisplayMode("history", true)
     CoverBrowser.setupWidgetDisplayMode("collections", true)

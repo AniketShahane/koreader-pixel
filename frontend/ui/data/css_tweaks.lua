@@ -31,6 +31,51 @@ DEFAULT_GLOBAL_STYLE_TWEAKS["inpage_footnote_font-size_smaller"] = true
 local CssTweaks = {
     DEFAULT_GLOBAL_STYLE_TWEAKS = DEFAULT_GLOBAL_STYLE_TWEAKS,
     {
+        title = _("Pixel theme"),
+        {
+            id = "pixel_headings",
+            title = _("Pixel chapter titles"),
+            description = _("Chapter titles in the PixelTerm font, in capitals, left-aligned, with a dashed rule underneath."),
+            priority = 6, -- after "Center headings" and the other title tweaks
+            css = [[
+h1, h2, h3 {
+    font-family: "PixelTerm" !important;
+    font-weight: normal !important;
+    font-style: normal !important;
+    text-transform: uppercase !important;
+    text-align: left !important;
+    text-indent: 0 !important;
+    line-height: 0.95 !important;
+    hyphens: none !important;
+    margin-top: 0.3em !important;
+    margin-bottom: 1em !important;
+    padding-bottom: 0.3em !important;
+    border-bottom: 0.2em dashed black !important;
+}
+h1 { font-size: 2.6em !important; }
+h2 { font-size: 2.3em !important; }
+h3 { font-size: 1.8em !important; }
+h4, h5, h6 {
+    font-family: "PixelTerm" !important;
+    font-weight: normal !important;
+    text-transform: uppercase !important;
+    font-size: 1.4em !important;
+    text-align: left !important;
+}
+h1 *, h2 *, h3 *, h4 *, h5 *, h6 * { font-family: inherit !important; font-size: inherit !important; }
+            ]],
+        },
+        {
+            id = "pixel_paragraphs",
+            title = _("Pixel paragraphs"),
+            description = _("No first-line indent, and a gap after each paragraph, like the Pixel mock-up."),
+            priority = 6,
+            css = [[
+p { text-indent: 0 !important; margin-top: 0 !important; margin-bottom: 0.85em !important; }
+            ]],
+        },
+    },
+    {
         title = C_("Style tweaks category", "Pages and margins"),
         {
             id = "margin_body_0",

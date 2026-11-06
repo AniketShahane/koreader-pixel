@@ -384,6 +384,17 @@ function Screensaver:setup(event, event_message)
         self.screensaver_type = "cover"
         is_document_cover = true
     end
+    if self.screensaver_type == "pixel" and not require("pixel/theme").active then
+        self.screensaver_type = "cover" -- Pixel sleep screen needs the Pixel theme
+    end
+    if self.screensaver_type == "pixel" then
+        -- Pixel theme: title, pixel-art cover and progress (cover is optional)
+        self.pixel_file = lastfile
+        if lastfile and lfs.attributes(lastfile, "mode") == "file" and not DocumentRegistry:isImageFile(lastfile) then
+            local ok, image = pcall(self.ui.bookinfo.getCoverImage, self.ui.bookinfo, self.ui.document, lastfile)
+            self.image = ok and image or nil
+        end
+    end
     if self.screensaver_type == "cover" then
         local excluded
         if not is_document_cover and lastfile then
@@ -546,6 +557,15 @@ function Screensaver:show()
             widget_settings.rotation_angle = angle
         end
         widget = ImageWidget:new(widget_settings)
+    elseif self.screensaver_type == "pixel" then
+        widget = require("pixel/sleep"):new{
+            ui = self.ui,
+            file = self.pixel_file,
+            image = self.image, -- the widget takes ownership
+            width = screen_w,
+            height = screen_h,
+        }
+        self.image = nil
     elseif self.screensaver_type == "bookstatus" then
         widget = BookStatusWidget:new{
             ui = self.ui,
@@ -776,6 +796,7 @@ function Screensaver:cleanup()
 
     self.image = nil
     self.image_file = nil
+    self.pixel_file = nil
 
     self.delayed_close = nil
     self.screensaver_widget = nil

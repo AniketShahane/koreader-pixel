@@ -326,4 +326,11 @@ if ui.document then
     })
 end
 
+
+-- Pixel theme: offer its sleep screen first
+if require("pixel/theme").active then
+    table.insert(sub_item_table[1].sub_item_table, 1,
+        genMenuItem(_("Pixel sleep screen: title, pixel-art cover, progress"), "screensaver_type", "pixel"))
+end
+
 return sub_item_table

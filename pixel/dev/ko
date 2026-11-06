@@ -1,0 +1,12 @@
+#!/bin/bash
+# Send commands to the running simulator: ko tap 600 800; ko shot /tmp/a.png
+# Each arg list is one command. Waits until the simulator has run it.
+source "$(dirname "${BASH_SOURCE[0]}")/../env.sh"; ROOT="$PIXEL_WORK"
+D="$ROOT/sim/home/simdriver"
+mkdir -p "$D"; : > "$D/out"
+printf '%s\n' "$*" > "$D/cmd.tmp" && mv "$D/cmd.tmp" "$D/cmd"
+for i in $(seq 1 150); do
+  grep -q DONE "$D/out" 2>/dev/null && { grep -v DONE "$D/out"; exit 0; }
+  sleep 0.1
+done
+echo "simulator did not answer (is it running?)" >&2; exit 1

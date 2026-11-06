@@ -69,6 +69,8 @@ local order = {
     setting = {
         -- common settings
         -- those that don't exist will simply be skipped during menu gen
+        "pixel_theme",
+        "----------------------------",
         "frontlight", -- if Device:hasFrontlight()
         "night_mode",
         "----------------------------",
