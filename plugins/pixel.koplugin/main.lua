@@ -142,9 +142,26 @@ function Pixel:initReader()
 
     local config = ui.config
     if config and ui.rolling then -- reflowable books (EPUB, FB2, TXT…); PDFs keep the stock panel
+        -- Stock KOReader opens the bottom panel together with the top menu.
+        -- Pixel OPTIONS only opens from the bottom (tap, swipe up, or the footer),
+        -- so the top tap shows just the top menu.
         local orig_show = config.onShowConfigMenu
+        local from_bottom = false
+        local function fromBottom(orig)
+            return function(this, ...)
+                from_bottom = true
+                local ok, r = pcall(orig, this, ...)
+                from_bottom = false
+                if not ok then error(r) end
+                return r
+            end
+        end
+        config.onTapShowConfigMenu = fromBottom(config.onTapShowConfigMenu)
+        config.onSwipeShowConfigMenu = fromBottom(config.onSwipeShowConfigMenu)
+        config.pixelShowOptions = fromBottom(function(this) return this:onShowConfigMenu() end)
         config.onShowConfigMenu = function(this)
             if G_reader_settings:nilOrTrue("pixel_options_menu") then
+                if not from_bottom then return true end -- came with the top menu: skip
                 return self:showOptions(function() orig_show(this) end)
             end
             return orig_show(this)
@@ -439,6 +456,16 @@ function Pixel:addToMainMenu(menu_items)
                         callback = function(touchmenu_instance) self:editDriveFolder(touchmenu_instance) end,
                     },
                 },
+            },
+            {
+                text = _("Show folders in library"),
+                help_text = _("Off (default): the library shows only books. On: folders are shown too."),
+                checked_func = function() return G_reader_settings:isTrue("pixel_show_folders") end,
+                callback = function()
+                    G_reader_settings:flipNilOrFalse("pixel_show_folders")
+                    local FM = require("apps/filemanager/filemanager")
+                    if FM.instance and FM.instance.file_chooser then FM.instance.file_chooser:refreshPath() end
+                end,
             },
             {
                 text = _("Header with title and chapter"),

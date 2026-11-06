@@ -189,7 +189,7 @@ function ReaderChrome.installFooter(footer)
     local orig_tap = footer.TapFooter
     footer.TapFooter = function(self, ges)
         if G_reader_settings:nilOrTrue("pixel_options_menu") and self.ui.rolling and self.ui.config then
-            self.ui.config:onShowConfigMenu()
+            if self.ui.config.pixelShowOptions then self.ui.config:pixelShowOptions() else self.ui.config:onShowConfigMenu() end
             return true
         end
         return orig_tap(self, ges)

@@ -64,7 +64,10 @@ do
     local orig_gen = FileChooser.genItemTableFromPath
     function FileChooser:genItemTableFromPath(path)
         local items, readable = orig_gen(self, path)
-        if Theme.active and self.name == "filemanager" and FileChooser.show_filter.status and type(items) == "table" then
+        -- Books only: folders are hidden (Settings > Pixel theme > Show folders in library
+        -- brings them back), and always while a READING/DONE/NEW tab is active.
+        local hide = FileChooser.show_filter.status or not G_reader_settings:isTrue("pixel_show_folders")
+        if Theme.active and self.name == "filemanager" and hide and type(items) == "table" then
             local kept = {}
             for _, item in ipairs(items) do
                 if item.is_file or item.is_go_up then table.insert(kept, item) end
