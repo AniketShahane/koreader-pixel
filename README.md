@@ -24,9 +24,12 @@ sentence of that book*.
 - **Reading:** IBM Plex Mono text, pixel chapter titles with a dashed rule, a
   header with the title and chapter, and a footer with the page, one square
   per page of the chapter, and minutes left.
-- **Explain:** long-press a word. A "CLAUDE" box shows MEANING / HERE / DEEPER
-  (tap ▼ MORE for DEEPER) and related words you can tap. DICT opens the normal dictionary. To
-  explain a phrase, select several words and pick **Explain**.
+- **Explain:** long-press one word for the normal dictionary, which now has
+  an **ASK CLAUDE** button for when the dictionary misses the meaning. Select
+  several words and tap **EXPLAIN WITH CLAUDE** (the first button). A "CLAUDE"
+  box shows MEANING and HERE (tap ▼ MORE for DEEPER), plus related words you
+  can tap. To send single words straight to Claude, turn on
+  **Settings > Pixel theme > Explain with Claude > Use Claude for single words too**.
 - **OPTIONS** (tap the bottom of the page): font, size and spacing with ◀ ▶,
   plus CONTENTS / BOOKMARKS / SEARCH. ALL SETTINGS opens KOReader's full panel.
 - **Sleep screen:** the title, an 8-bit version of the real cover, the chapter,
@@ -65,7 +68,9 @@ You need a jailbroken Kindle with KUAL and MRPI (see <https://kindlemodding.org>
 3. On the Kindle, open **KUAL > KOReader**.
 4. For Explain, put a text file named `claude_api_key.txt`, containing only
    your key, in the `koreader` folder on the Kindle.
-5. Add **DRM-free** books (EPUB etc.) to `documents`. Books bought from Amazon are locked and won't open.
+5. For the dictionary: **Settings > Dictionary settings > Download dictionaries**
+   (for example WordNet, for English).
+6. Add **DRM-free** books (EPUB etc.) to `documents`. Books bought from Amazon are locked and won't open.
 
 ## Explain and Claude
 

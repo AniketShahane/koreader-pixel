@@ -3,7 +3,7 @@ Dev-only remote control for the Mac simulator.
 
 pixel/dev/ko writes one command per line into $KO_HOME/simdriver/cmd; we poll
 it, run each line, and write results to $KO_HOME/simdriver/out. Commands:
-  tap X Y | hold X Y | swipe X Y DIR [DIST] | key NAME | open PATH
+  tap X Y | hold X Y | select X1 Y1 X2 Y2 | swipe X Y DIR [DIST] | key NAME | open PATH
   shot PATH | suspend | resume | lua CODE | home | quit
 Coordinates are framebuffer pixels (1236x1648 on the Paperwhite-sized window).
 ]]
@@ -37,6 +37,15 @@ function handlers.hold(x, y)
     x, y = tonumber(x), tonumber(y)
     gesture("hold", x, y)
     UIManager:scheduleIn(0.15, function() gesture("hold_release", x, y) end)
+end
+-- Select several words: press at (x1,y1), drag to (x2,y2), let go
+function handlers.select(x1, y1, x2, y2)
+    x1, y1, x2, y2 = tonumber(x1), tonumber(y1), tonumber(x2), tonumber(y2)
+    gesture("hold", x1, y1)
+    UIManager:scheduleIn(0.2, function()
+        gesture("hold_pan", x2, y2, { direction = "east", distance = math.abs(x2 - x1), relative = { x = x2 - x1, y = y2 - y1 } })
+        UIManager:scheduleIn(0.2, function() gesture("hold_release", x2, y2) end)
+    end)
 end
 function handlers.swipe(x, y, dir_, dist)
     gesture("swipe", tonumber(x), tonumber(y), { direction = dir_, distance = tonumber(dist) or 300 })

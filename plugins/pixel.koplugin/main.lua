@@ -96,17 +96,47 @@ function Pixel:initReader()
         self.orig_lookup = orig_lookup
         hl.lookupDictWord = function(this)
             local text = this.selected_text and this.selected_text.text
-            if G_reader_settings:nilOrTrue("pixel_explain_on_hold") and text and text ~= "" then
+            -- Single words go to the dictionary unless the user turned this on
+            if G_reader_settings:isTrue("pixel_explain_on_hold") and text and text ~= "" then
                 return self:explainSelection(this)
             end
             return orig_lookup(this)
         end
-        hl:addToHighlightDialog("05_pixel_explain", function(this)
+        -- First button in the menu shown after selecting several words
+        hl:addToHighlightDialog("00_pixel_explain", function(this)
             return {
-                text = _("Explain"),
+                text = _("Explain with Claude"),
                 callback = function() self:explainSelection(this, true) end,
             }
         end)
+    end
+
+    -- "ASK CLAUDE" in the dictionary popup, for when the dictionary misses
+    -- the sense the book means (e.g. "hypos" in Moby-Dick isn't photography)
+    if ui.dictionary and ui.dictionary.addToDictButtons then
+        ui.dictionary:addToDictButtons({
+            id = "pixel_ask_claude",
+            menu_text = _("Ask Claude (Pixel theme)"),
+            text = _("Ask Claude"),
+            insert_first = true,
+            show_func = function() return ui.document ~= nil end,
+            callback = function(popup)
+                local h = ui.highlight
+                if h and h.selected_text and h.selected_text.text and h.selected_text.text ~= "" then
+                    popup:onClose(true) -- keep the selection; Explain clears it when done
+                    self:explainSelection(h)
+                else
+                    -- typed lookup, no selection in the book: explain the word alone
+                    local word = popup.lookupword or popup.word
+                    popup:onClose()
+                    if word and word ~= "" then
+                        local props = ui.doc_props or {}
+                        self:runExplain({ word = word, title = props.display_title or props.title, author = props.authors },
+                            false, nil, nil, nil)
+                    end
+                end
+            end,
+        })
     end
 
     local config = ui.config
@@ -350,10 +380,10 @@ function Pixel:addToMainMenu(menu_items)
                         sub_item_table = model_items,
                     },
                     {
-                        text = _("Long-press a word to explain it"),
-                        help_text = _("When off, long-press shows the dictionary as usual. You can still pick Explain after selecting several words."),
-                        checked_func = on("pixel_explain_on_hold"),
-                        callback = toggle("pixel_explain_on_hold"),
+                        text = _("Use Claude for single words too"),
+                        help_text = _("Off (default): long-pressing one word opens the dictionary, and Claude explains phrases (select several words, then Explain with Claude). On: long-pressing one word asks Claude too."),
+                        checked_func = function() return G_reader_settings:isTrue("pixel_explain_on_hold") end,
+                        callback = function() G_reader_settings:flipNilOrFalse("pixel_explain_on_hold") end,
                     },
                     {
                         text = _("Forget saved explanations"),
