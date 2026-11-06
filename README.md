@@ -25,7 +25,7 @@ sentence of that book*.
   header with the title and chapter, and a footer with the page, one square
   per page of the chapter, and minutes left.
 - **Explain:** long-press a word. A "CLAUDE" box shows MEANING / HERE / DEEPER
-  and two related words you can tap. DICT opens the normal dictionary. To
+  (tap ▼ MORE for DEEPER) and related words you can tap. DICT opens the normal dictionary. To
   explain a phrase, select several words and pick **Explain**.
 - **OPTIONS** (tap the bottom of the page): font, size and spacing with ◀ ▶,
   plus CONTENTS / BOOKMARKS / SEARCH. ALL SETTINGS opens KOReader's full panel.
@@ -69,9 +69,9 @@ You need a jailbroken Kindle with KUAL and MRPI (see <https://kindlemodding.org>
 
 ## Explain and Claude
 
-- Each new word is one request to the Claude API: Claude Opus 5.5 by default,
+- Each new word is one request to the Claude API: Claude Sonnet 5.5 by default,
   effort "low", answering as JSON that follows a fixed schema. You can switch to
-  Sonnet 5.5 or Haiku 5.5 in the menu.
+  Opus 5.5 or Haiku 5.5 in the menu.
 - Answers are saved per book and word, so looking a word up again is free and
   works offline.
 - Requests send `fallbacks: "default"`: if a model declines, another one answers.

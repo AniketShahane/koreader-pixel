@@ -47,7 +47,8 @@ function Cache.open()
 end
 
 local function cacheKey(req)
-    return table.concat({ req.title or "", (req.word or ""):lower(), (req.related_to or ""):lower() }, "\31")
+    -- "v2": bump when the prompt changes, so old answers aren't reused
+    return table.concat({ "v2", req.title or "", (req.word or ""):lower(), (req.related_to or ""):lower() }, "\31")
 end
 
 function Cache.get(req)
@@ -152,6 +153,16 @@ function Pixel:explainSelection(hl, from_menu)
 
     if from_menu then
         hl:onClose(true) -- close the selection menu, keep the selection visible
+    end
+
+    -- The book engine marks selections in grey itself; swap that for the
+    -- mock-up's white-on-black word.
+    if self.ui.rolling and sel.sboxes and hl.hold_pos then
+        pcall(function()
+            self.ui.document:clearSelection()
+            self.ui.view.highlight.temp = { [hl.hold_pos.page] = sel.sboxes }
+            UIManager:setDirty(self.ui.dialog, "ui")
+        end)
     end
 
     local props = self.ui.doc_props or {}

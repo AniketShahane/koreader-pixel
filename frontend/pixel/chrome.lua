@@ -43,15 +43,23 @@ local function installFonts(Theme)
     Font.bold_font_variant[Theme.fonts.monoi] = "pixel/IBMPlexMono-BoldItalic.ttf"
 
     local orig_getFace = Font.getFace
+    local function noLigatures(face)
+        -- the pixel font has no "fi"/"fl" ligatures; a fallback font's look out of place
+        if face and face.realname == vt and not face.pixel_features then
+            face.hb_features = { "+kern", "-liga", "-clig" }
+            face.pixel_features = true
+        end
+        return face
+    end
     function Font:getFace(font, size, faceindex)
         local k = font and scale[font]
-        if not k then return orig_getFace(self, font, size, faceindex) end
+        if not k then return noLigatures(orig_getFace(self, font, size, faceindex)) end
         local asked = size or self.sizemap[font] or 20
         local face = orig_getFace(self, font, asked * k, faceindex)
         -- Report the size the caller asked for: stock "shrink to fit" loops
         -- retry with orig_size - 1, which must not get scaled up again.
         if face then face.orig_size = asked end
-        return face
+        return noLigatures(face)
     end
 
     local orig_getAdjustedFace = Font.getAdjustedFace

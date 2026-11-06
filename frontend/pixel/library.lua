@@ -57,6 +57,24 @@ function Library.shortTitle(title)
     return util.trim(title)
 end
 
+-- With a status tab on (READING / DONE / NEW), show books only: a folder
+-- tile reading "0 ITEMS" under DONE just looks broken.
+do
+    local FileChooser = require("ui/widget/filechooser")
+    local orig_gen = FileChooser.genItemTableFromPath
+    function FileChooser:genItemTableFromPath(path)
+        local items, readable = orig_gen(self, path)
+        if Theme.active and self.name == "filemanager" and FileChooser.show_filter.status and type(items) == "table" then
+            local kept = {}
+            for _, item in ipairs(items) do
+                if item.is_file or item.is_go_up then table.insert(kept, item) end
+            end
+            return kept, readable
+        end
+        return items, readable
+    end
+end
+
 ---------------------------------------------------------------------------
 -- Header
 ---------------------------------------------------------------------------

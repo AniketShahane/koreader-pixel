@@ -11,7 +11,11 @@ APP="$PIXEL_WORK/sim/KOReader.app/Contents/koreader"
 "$PIXEL_REPO/pixel/sync.sh" "$APP"
 mkdir -p "$PIXEL_WORK/sim/home/plugins"
 rsync -a "$PIXEL_REPO/pixel/dev/simdriver.koplugin" "$PIXEL_WORK/sim/home/plugins/"
-pkill -f "^\./luajit reader\.lua" 2>/dev/null || true  # an older simulator
+# Only one simulator at a time (they share settings and the dev remote)
+if pgrep -f "^\./luajit reader\.lua" >/dev/null; then
+  pkill -f "^\./luajit reader\.lua"; sleep 2
+  pkill -9 -f "^\./luajit reader\.lua" 2>/dev/null || true
+fi
 cd "$APP"
 export KO_HOME="$PIXEL_WORK/sim/home"
 export EMULATE_READER_W=618 EMULATE_READER_H=824   # x2 on a Retina Mac = 1236x1648 = Paperwhite

@@ -36,6 +36,7 @@ local ExplainDialog = InputContainer:extend{
     word_box = nil,      -- screen rect of the selected word: we stay clear of it
     anchor_top = false,
     state = "loading",   -- "loading" | "result" | "error"
+    expanded = false,    -- DEEPER shown (tap ▼)
     result = nil,
     error = nil,         -- message, or "nokey"
     on_close = nil,      -- function()
@@ -72,7 +73,7 @@ function ExplainDialog:_section(label, body, width)
         text = string.rep("\u{00A0}", n) .. (body or ""),
         face = face,
         width = width,
-        line_height = 0.5,
+        line_height = 0.4,
         fgcolor = Theme.ink,
         height = self.section_max_h, -- nil = no limit
         height_adjust = true,
@@ -100,7 +101,7 @@ function ExplainDialog:layout()
     local r = self.result or {}
     -- Keep the whole box (and its buttons) on screen: each of the three
     -- sections gets at most a share of the free height.
-    local free_h = Screen:getHeight() - px(40) - px(14) - px(14) - px(150)
+    local free_h = Screen:getHeight() - px(40) - px(14) - px(34) - px(150)
     self.section_max_h = math.max(px(40), math.floor(free_h / 3))
     local headword = (self.state == "result" and r.headword ~= "" and r.headword) or self.word
     local kind
@@ -129,7 +130,9 @@ function ExplainDialog:layout()
     else
         table.insert(self.sections, self:_section("▸ MEANING", r.meaning, inner_w))
         table.insert(self.sections, self:_section("▸ HERE", r.here, inner_w))
-        table.insert(self.sections, self:_section("▸ DEEPER", r.deeper, inner_w))
+        if self.expanded then
+            table.insert(self.sections, self:_section("▸ DEEPER", r.deeper, inner_w))
+        end
     end
 
     -- Chips: related words, then DICT
@@ -141,7 +144,29 @@ function ExplainDialog:layout()
     if self.on_dictionary and self.state ~= "loading" then
         table.insert(self.chips, { dict = true, w = tw("DICT", Theme.face("vt", 18), Theme.paper) })
     end
-    self.more = tw("▼", Theme.face("vt", 20))
+    -- ▼ reveals DEEPER, like "next" in a game dialog; ▲ folds it back
+    self.has_more = self.state == "result" and r.deeper and r.deeper ~= ""
+    self.more = tw(self.has_more and (self.expanded and "▲ LESS" or "▼ MORE") or "", Theme.face("vt", 18))
+
+    -- Chips must fit on one row next to the ▼: drop related words that
+    -- don't fit (DICT always stays, at the end).
+    local function chip_w(c) return c.w:getSize().w + 2 * px(7) end
+    local budget = inner_w - self.more:getSize().w - px(16)
+    local dict = (#self.chips > 0 and self.chips[#self.chips].dict) and self.chips[#self.chips] or nil
+    if dict then budget = budget - chip_w(dict) - px(10) end
+    local kept = {}
+    for _, c in ipairs(self.chips) do
+        if not c.dict then
+            if chip_w(c) <= budget then
+                table.insert(kept, c)
+                budget = budget - chip_w(c) - px(10)
+            else
+                c.w:free()
+            end
+        end
+    end
+    if dict then table.insert(kept, dict) end
+    self.chips = kept
 
     -- Height of the box
     local pad_top, pad_bottom = px(20), px(12)
@@ -149,12 +174,14 @@ function ExplainDialog:layout()
     if self.kind_below then h = h + self.kind:getSize().h end
     for _, s in ipairs(self.sections) do h = h + px(4) + s.h end
     self.chip_h = px(22)
-    h = h + px(10) + self.chip_h + pad_bottom + 2 * px(4)
+    local chip_row = (#self.chips > 0 or self.has_more) and (px(10) + self.chip_h) or 0
+    h = h + chip_row + pad_bottom + 2 * px(4)
     self.box_h = h
 
     local tag_over = px(14)
     local sh = Screen:getHeight()
-    local y_top, y_bottom = px(40), sh - px(14) - h - tag_over
+    local bottom_edge = sh - require("pixel/reader").footerHeight() - px(4) -- keep the footer visible
+    local y_top, y_bottom = px(40), bottom_edge - h - tag_over
     if y_bottom < px(14) then y_bottom = px(14) end
     local y = self.anchor_top and y_top or y_bottom
     local wb = self.word_box
@@ -226,7 +253,9 @@ function ExplainDialog:paintTo(bb, x, y)
         chip_x = chip_x + w + px(10)
     end
     local ms = self.more:getSize()
-    self.more:paintTo(bb, cx + inner_w - ms.w, cy + math.floor((self.chip_h - ms.h) / 2))
+    local mx = cx + inner_w - ms.w
+    self.more:paintTo(bb, mx, cy + math.floor((self.chip_h - ms.h) / 2))
+    self.more_rect = self.has_more and Geom:new{ x = mx - px(12), y = cy - px(10), w = ms.w + px(20), h = self.chip_h + px(20) } or nil
 end
 
 -- Our dimen plus the white margin painted around the box.
@@ -243,6 +272,11 @@ function ExplainDialog:onTapDialog(_, ges)
     local pos = ges.pos
     if self.state == "loading" then
         self:onClose()
+        return true
+    end
+    if self:_inside(pos, self.more_rect) then
+        self.expanded = not self.expanded
+        self:update(self.state, self.result, self.error)
         return true
     end
     for _, c in ipairs(self.chips or {}) do
@@ -271,7 +305,7 @@ end
 
 function ExplainDialog:setResult(result) self:update("result", result, nil) end
 function ExplainDialog:setError(err) self:update("error", nil, err) end
-function ExplainDialog:setLoading(word) self:update("loading", nil, nil, word) end
+function ExplainDialog:setLoading(word) self.expanded = false; self:update("loading", nil, nil, word) end
 
 function ExplainDialog:onClose(keep_selection)
     if self.dismiss_callback then
