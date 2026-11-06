@@ -46,13 +46,33 @@ function Theme.isEnabled()
     return G_reader_settings == nil or G_reader_settings:nilOrTrue("pixel_theme")
 end
 
-local function unit()
-    return math.min(Screen:getWidth(), Screen:getHeight()) / Theme.MOCKUP_WIDTH
+-- One size dial for the whole interface (library, menus, dialogs). The
+-- OPTIONS SIZE control moves it together with the book's text size.
+Theme.DEFAULT_UI_SCALE = 0.85
+function Theme.uiScale()
+    local s = G_reader_settings and G_reader_settings:readSetting("pixel_ui_scale")
+    return tonumber(s) or Theme.DEFAULT_UI_SCALE
 end
 
---- Mock-up pixels -> device pixels (never less than 1).
+--- The interface scale that goes with a book font size (18 = default).
+function Theme.uiScaleForFontSize(size)
+    return Theme.DEFAULT_UI_SCALE * (1 + (size / 18 - 1) * 0.6)
+end
+
+local function base_unit()
+    return math.min(Screen:getWidth(), Screen:getHeight()) / Theme.MOCKUP_WIDTH
+end
+local function unit() return base_unit() * Theme.uiScale() end
+
+--- Mock-up pixels -> device pixels, following the interface size (never < 1).
 function Theme.px(n)
     return math.max(1, math.floor(n * unit() + 0.5))
+end
+
+--- Mock-up pixels -> device pixels, NOT following the interface size
+-- (page margins and the reading header/footer slots, which the book layout depends on).
+function Theme.px0(n)
+    return math.max(1, math.floor(n * base_unit() + 0.5))
 end
 
 --- Mock-up font px -> KOReader font size (Font:getFace scales it by scaleBySize).

@@ -55,7 +55,7 @@ local function installFonts(Theme)
         local k = font and scale[font]
         if not k then return noLigatures(orig_getFace(self, font, size, faceindex)) end
         local asked = size or self.sizemap[font] or 20
-        local face = orig_getFace(self, font, asked * k, faceindex)
+        local face = orig_getFace(self, font, asked * k * Theme.uiScale(), faceindex)
         -- Report the size the caller asked for: stock "shrink to fit" loops
         -- retry with orig_size - 1, which must not get scaled up again.
         if face then face.orig_size = asked end
@@ -199,7 +199,7 @@ local function applyDefaults(Theme)
     if G_reader_settings:isTrue("pixel_defaults_done") then return end
     local Screen = require("device").screen
     local unit = Screen:scaleBySize(1000) / 1000 -- KOReader margins are in scaled px
-    local function margin(mockup_px) return math.floor(Theme.px(mockup_px) / unit + 0.5) end
+    local function margin(mockup_px) return math.floor(Theme.px0(mockup_px) / unit + 0.5) end
     G_reader_settings:saveSetting("cre_font", "IBM Plex Mono")
     G_reader_settings:saveSetting("copt_font_size", 18)
     G_reader_settings:saveSetting("copt_line_spacing", 125)

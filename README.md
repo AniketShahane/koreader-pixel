@@ -30,7 +30,7 @@ sentence of that book*.
   box shows MEANING and HERE (tap ▼ MORE for DEEPER), plus related words you
   can tap. To send single words straight to Claude, turn on
   **Settings > Pixel theme > Explain with Claude > Use Claude for single words too**.
-- **OPTIONS** (tap the bottom of the page): font, size and spacing with ◀ ▶,
+- **OPTIONS** (tap the page number bar at the bottom): font, size and spacing with ◀ ▶ (SIZE scales the menus and library too),
   plus CONTENTS / BOOKMARKS / SEARCH. ALL SETTINGS opens KOReader's full panel.
 - **Sleep screen:** the title, an 8-bit version of the real cover, the chapter,
   and a progress bar.

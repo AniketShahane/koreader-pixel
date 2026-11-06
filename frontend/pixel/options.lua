@@ -65,7 +65,12 @@ function Options:init()
     end
     self:readState()
     self.cursor = 1
-    -- Measure the content so the box hugs it, and sit just above the footer.
+    self:measure()
+end
+
+-- Measure the content so the box hugs it, and sit just above the footer.
+-- (Re-run after SIZE changes: the whole interface scales with it.)
+function Options:measure()
     local function h(str, size)
         local t = TextWidget:new{ text = str, face = Theme.face("vt", size) }
         local v = t:getSize().h
@@ -104,6 +109,12 @@ function Options:apply(what)
         ui:handleEvent(Event:new("SetLineSpace", self:spacingPercent()))
     elseif what == "size" then
         ui:handleEvent(Event:new("SetFontSize", SIZES[self.size_i]))
+        -- one dial: menus, library and dialogs follow the book text size
+        G_reader_settings:saveSetting("pixel_ui_scale", Theme.uiScaleForFontSize(SIZES[self.size_i]))
+        local old = self.dimen
+        self:measure()
+        UIManager:setDirty("all", "ui", old:combine(self.dimen))
+        return
     elseif what == "spacing" then
         ui.doc_settings:saveSetting("pixel_spacing", self.spacing_i)
         ui:handleEvent(Event:new("SetLineSpace", self:spacingPercent()))

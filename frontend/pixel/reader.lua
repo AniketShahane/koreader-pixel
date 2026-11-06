@@ -23,9 +23,9 @@ local px = Theme.px
 local ReaderChrome = {}
 
 --- Space the page needs above the text for the header (device px).
-function ReaderChrome.headerSpace() return px(44) end
+function ReaderChrome.headerSpace() return Theme.px0(44) end
 --- Height of the footer strip (device px).
-function ReaderChrome.footerHeight() return px(34) end
+function ReaderChrome.footerHeight() return Theme.px0(34) end
 
 function ReaderChrome.headerEnabled()
     return G_reader_settings:nilOrTrue("pixel_reader_header")
@@ -183,6 +183,16 @@ function ReaderChrome.installFooter(footer)
     end
     footer.paintTo = function(self, bb, x, y)
         ReaderChrome.paintFooter(self, bb, x, y)
+    end
+    -- Our footer has no modes to cycle, so a tap on it opens OPTIONS
+    -- (the strip above it alone is too thin to hit reliably).
+    local orig_tap = footer.TapFooter
+    footer.TapFooter = function(self, ges)
+        if G_reader_settings:nilOrTrue("pixel_options_menu") and self.ui.rolling and self.ui.config then
+            self.ui.config:onShowConfigMenu()
+            return true
+        end
+        return orig_tap(self, ges)
     end
 end
 
