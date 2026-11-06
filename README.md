@@ -113,6 +113,7 @@ the Mac simulator and the Kindle package.
 | `pixel/setup.sh`, `run-mac.sh`, `deploy-kindle.sh`, `sync.sh` | download, run, package, overlay |
 | `pixel/fonts/` | PixelTerm (VT323 plus pixel arrows and blocks), Space Mono, DM Mono, IBM Plex Mono, all under the SIL OFL |
 | `pixel/tools/` | scripts that build the font and the icons |
+| `pixel/tools/kmtp/` | `kmtp`: copies files to a Kindle over MTP from the terminal, all in one connection (newer Kindles drop off USB when a session ends). `pixel/tools/kmtp/build.sh`, then e.g. `kmtp wait putpath koreader/frontend/pixel/sleep.lua koreader/frontend/pixel/sleep.lua` |
 | `pixel/dev/` | simulator remote control (`ko tap X Y`, `ko shot file.png`…), dev-only |
 
 ## License
