@@ -196,4 +196,7 @@ function ReaderChrome.installFooter(footer)
     end
 end
 
+--- page, total, chapter pages, page in chapter, minutes left in chapter
+ReaderChrome.footerData = footerData
+
 return ReaderChrome

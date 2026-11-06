@@ -17,10 +17,13 @@ sentence of that book*.
 
 ## What it changes
 
-- **Library:** book covers in rows of 3, each in a notched pixel frame with a
-  title strip and a block progress bar. ALL / READING / DONE / NEW tabs, and a
-  bottom bar with BOOKS / RECENT / FIND / OPTIONS. Books with no cover get a
-  pixel pattern.
+- **Library:** a big **NOW READING** card on top for the book you're on (cover,
+  author, chapter, minutes left, progress; tap it to keep reading), then the
+  other books 4 across. Every cover shows whole (never cropped) in a notched
+  pixel frame, with the title under it and a block progress bar. ALL / READING /
+  DONE / NEW tabs, and a bottom bar with BOOKS / RECENT / FIND / SYNC / OPTIONS.
+  Books with no cover get a pixel pattern. Turn the card off in
+  **Settings > Pixel theme > Now reading on top of library** (then it's 3 × 2).
 - **Reading:** Space Mono text, pixel chapter titles with a dashed rule, a
   header with the title and chapter, and a footer with the page, one square
   per page of the chapter, and minutes left.

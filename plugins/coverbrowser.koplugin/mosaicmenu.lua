@@ -793,6 +793,11 @@ function MosaicMenu:_recalculateDimen()
         self.nb_cols = self.nb_cols_landscape
         self.nb_rows = self.nb_rows_landscape
     end
+    -- Pixel theme: NOW READING card on top, the other books 4 across under it
+    self.pixel_hero_file = Pixel.active and require("pixel/library").heroFile(self) or nil
+    if self.pixel_hero_file then
+        self.nb_cols, self.nb_rows = 4, 1
+    end
     self.perpage = self.nb_rows * self.nb_cols
     self.page_num = math.ceil(#self.item_table / self.perpage)
     -- fix current page if out of range
@@ -814,8 +819,17 @@ function MosaicMenu:_recalculateDimen()
 
     -- Set our items target size
     self.item_margin = Pixel.active and Pixel.px(12) or Screen:scaleBySize(10)
-    self.item_height = math.floor((self.inner_dimen.h - self.others_height - (1+self.nb_rows)*self.item_margin) / self.nb_rows)
+    self.pixel_hero_h = self.pixel_hero_file and (require("pixel/library").heroHeight() + self.item_margin) or 0
+    self.item_height = math.floor((self.inner_dimen.h - self.others_height - self.pixel_hero_h - (1+self.nb_rows)*self.item_margin) / self.nb_rows)
     self.item_width = math.floor((self.inner_dimen.w - (1+self.nb_cols)*self.item_margin) / self.nb_cols)
+    self.pixel_hero_extra = 0
+    if self.pixel_hero_file then -- spare height in the row goes to the big cover
+        local ideal = require("pixel/library").tileIdealHeight(self.item_width)
+        if self.item_height > ideal then
+            self.pixel_hero_extra = self.item_height - ideal
+            self.item_height = ideal
+        end
+    end
     self.item_dimen = Geom:new{
         x = 0, y = 0,
         w = self.item_width,
@@ -882,6 +896,16 @@ function MosaicMenu:_updateItemsBuildUI()
     local idx_offset = (self.page - 1) * self.perpage
     local line_layout = {}
     local select_number
+    if self.pixel_hero_file then
+        table.insert(self.item_group, VerticalSpan:new{ width = self.item_margin })
+        table.insert(self.item_group, require("pixel/library").Hero:new{
+            width = self.inner_dimen.w,
+            margin = self.item_margin,
+            file = self.pixel_hero_file,
+            bim = BookInfoManager,
+            extra_h = self.pixel_hero_extra,
+        })
+    end
     for idx = 1, self.perpage do
         local index = idx_offset + idx
         local entry = self.item_table[index]

@@ -268,7 +268,20 @@ function Pixel:onReaderReady()
     ui:handleEvent(Event:new("SetLineSpace", math.floor(sp[2] / 1.48 * 100 / 5 + 0.5) * 5))
 end
 
+-- Remember where you are (chapter, minutes left) so the library's
+-- NOW READING card can show it without opening the book.
+function Pixel:onSaveSettings()
+    local ui = self.ui
+    if not (Theme.active and ui and ui.document and ui.doc_settings) then return end
+    local Chrome = require("pixel/reader")
+    local ok, page, _total, _ch_pages, _ch_at, minutes = pcall(Chrome.footerData, ui)
+    if not ok or not page then return end
+    local ok2, chapter = pcall(Chrome.chapterLabel, ui, page)
+    ui.doc_settings:saveSetting("pixel_where", { chapter = ok2 and chapter or "", minutes = minutes })
+end
+
 function Pixel:onCloseDocument()
+    self:onSaveSettings() -- the final save on closing runs after the document is gone
     if self.explain_box and not self.explain_box.closed then
         self.explain_box:onClose()
     end
@@ -478,6 +491,16 @@ function Pixel:addToMainMenu(menu_items)
                 checked_func = function() return G_reader_settings:isTrue("pixel_show_folders") end,
                 callback = function()
                     G_reader_settings:flipNilOrFalse("pixel_show_folders")
+                    local FM = require("apps/filemanager/filemanager")
+                    if FM.instance and FM.instance.file_chooser then FM.instance.file_chooser:refreshPath() end
+                end,
+            },
+            {
+                text = _("Now reading on top of library"),
+                help_text = _("On (default): the book you're reading gets a big card at the top of the library, with the other books 4 across below it."),
+                checked_func = function() return G_reader_settings:nilOrTrue("pixel_now_reading") end,
+                callback = function()
+                    G_reader_settings:flipNilOrTrue("pixel_now_reading")
                     local FM = require("apps/filemanager/filemanager")
                     if FM.instance and FM.instance.file_chooser then FM.instance.file_chooser:refreshPath() end
                 end,

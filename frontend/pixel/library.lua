@@ -7,9 +7,11 @@ Three parts, all drawn by hand so they match the mock-up exactly:
             Replaces the file manager's title bar (same methods, so the
             file manager doesn't notice).
 * NavBar  - the black bar at the bottom: BOOKS / RECENT / FIND / SYNC / OPTIONS.
-* Tile    - one book: its cover in a notched pixel frame, a title strip,
-            and a block progress bar underneath. Books without a cover get
-            one of the mock-up's ten pixel patterns, picked from the title.
+* Hero    - NOW READING: the book you're on, big, with chapter, minutes
+            left and progress. The other books go 4 across under it.
+* Tile    - one book: its whole cover in a notched pixel frame, the title
+            under it (two lines), and a block progress bar. Books without a
+            cover get one of the mock-up's ten pixel patterns.
 
 Tiles are built by updateMosaicItem(), which the CoverBrowser plugin's
 mosaic view calls instead of its own tile code when the theme is on. Cover
@@ -24,10 +26,12 @@ local GestureRange = require("ui/gesturerange")
 local InputContainer = require("ui/widget/container/inputcontainer")
 local Paint = require("pixel/paint")
 local RenderImage = require("ui/renderimage")
+local TextBoxWidget = require("ui/widget/textboxwidget")
 local TextWidget = require("ui/widget/textwidget")
 local Theme = require("pixel/theme")
 local UIManager = require("ui/uimanager")
 local Widget = require("ui/widget/widget")
+local lfs = require("libs/libkoreader-lfs")
 local util = require("util")
 local Screen = Device.screen
 
@@ -67,10 +71,17 @@ do
         -- Books only: folders are hidden (Settings > Pixel theme > Show folders in library
         -- brings them back), and always while a READING/DONE/NEW tab is active.
         local hide = FileChooser.show_filter.status or not G_reader_settings:isTrue("pixel_show_folders")
-        if Theme.active and self.name == "filemanager" and hide and type(items) == "table" then
+        if Theme.active and self.name == "filemanager" and type(items) == "table" then
+            -- The NOW READING book is shown big above the grid, so not in it too.
+            local hero = Library.heroFile(self)
+            self.pixel_hero_excluded = nil
             local kept = {}
             for _, item in ipairs(items) do
-                if item.is_file or item.is_go_up then table.insert(kept, item) end
+                if hero and item.path == hero then
+                    self.pixel_hero_excluded = true
+                elseif not hide or item.is_file or item.is_go_up then
+                    table.insert(kept, item)
+                end
             end
             return kept, readable
         end
@@ -153,6 +164,7 @@ function Header:_bookCount()
     for _, item in ipairs(fc and fc.item_table or {}) do
         if item.is_file then n = n + 1 end
     end
+    if fc and fc.pixel_hero_excluded then n = n + 1 end -- the NOW READING book
     return n
 end
 
@@ -312,22 +324,62 @@ local Tile = Widget:extend{
 Library.Tile = Tile
 
 -- Layout shared by Tile and the cover size we ask CoverBrowser to cache.
+-- The whole cover shows (shrunk to fit, never cropped), sitting on the
+-- bottom of its box so covers line up; the title goes under it, then progress.
 function Library.tileLayout(w, h)
     local L = {}
     L.border = px(4)
-    L.under_h = px(21)
-    L.frame_h = h - L.under_h
-    L.strip_h = px(21)
-    L.rule = px(3)
-    L.cover_w = w - 2 * L.border
-    L.cover_h = L.frame_h - 2 * L.border - L.strip_h - L.rule
+    L.gap = px(4)
+    L.title_face = Theme.face("vt", 14)
+    L.title_h = px(30)  -- about two lines; the real height comes from the font
+    L.prog_h = px(16)
+    L.box_h = h - L.gap - L.title_h - L.prog_h
+    L.cover_w = w - 2 * L.border   -- the biggest the cover can be
+    L.cover_h = L.box_h - 2 * L.border
     return L
 end
 
---- How big a thumbnail CoverBrowser should cache so we can crop-to-fill.
+-- The NOW READING cover, in mock-up px.
+local HERO_COVER_W, HERO_COVER_H = 120, 168
+
+--- How big a thumbnail CoverBrowser should cache: sharp on a tile, and on
+-- the NOW READING card once that book is the one you're reading.
 function Library.coverSpecs(w, h)
     local L = Library.tileLayout(w, h)
-    return { max_cover_w = math.floor(L.cover_w * 1.5), max_cover_h = math.floor(L.cover_h * 1.5) }
+    return {
+        max_cover_w = math.max(math.floor(L.cover_w * 1.5), px(HERO_COVER_W + 10)),
+        max_cover_h = math.max(math.floor(L.cover_h * 1.5), px(HERO_COVER_H + 10)),
+    }
+end
+
+--- Scale a cover to fit inside max_w x max_h, keeping its shape. Frees the
+-- original if a new buffer was made.
+local function fitCover(bb, max_w, max_h)
+    local sw, sh = bb:getWidth(), bb:getHeight()
+    local scale = math.min(max_w / sw, max_h / sh)
+    local tw = math.max(1, math.floor(sw * scale))
+    local th = math.max(1, math.floor(sh * scale))
+    if tw == sw and th == sh then return bb end
+    local scaled = RenderImage:scaleBlitBuffer(bb, tw, th, false)
+    if scaled ~= bb then bb:free() end
+    return scaled
+end
+
+--- Text in at most max_lines lines, "…" when it doesn't fit.
+local function textLines(str, face, width, max_lines, fg, bg)
+    local args = {
+        text = str, face = face, width = width, line_height = 0,
+        fgcolor = fg or Theme.ink, bgcolor = bg or Theme.paper,
+    }
+    local tb = TextBoxWidget:new(args)
+    local lh = tb.line_height_px
+    if lh and tb:getSize().h > max_lines * lh + 1 then
+        tb:free()
+        args.height = max_lines * lh
+        args.height_overflow_show_ellipsis = true
+        tb = TextBoxWidget:new(args)
+    end
+    return tb
 end
 
 function Tile:init()
@@ -335,17 +387,11 @@ function Tile:init()
     self.L = Library.tileLayout(self.width, self.height)
     local L = self.L
     if self.cover_bb then
-        -- Scale to fill the cover box, keep the top (where titles usually are).
-        local sw, sh = self.cover_bb:getWidth(), self.cover_bb:getHeight()
-        local scale = math.max(L.cover_w / sw, L.cover_h / sh)
-        local tw, th = math.max(L.cover_w, math.ceil(sw * scale)), math.max(L.cover_h, math.ceil(sh * scale))
-        local scaled = RenderImage:scaleBlitBuffer(self.cover_bb, tw, th, false)
-        if scaled ~= self.cover_bb then
-            self.cover_bb:free()
-        end
-        self.cover_bb = scaled
-        self.crop_x = math.floor((tw - L.cover_w) / 2)
-        self.crop_y = math.floor((th - L.cover_h) * 0.08)
+        self.cover_bb = fitCover(self.cover_bb, L.cover_w, L.cover_h)
+        self.art_w, self.art_h = self.cover_bb:getWidth(), self.cover_bb:getHeight()
+    else -- pattern or folder: a 2:3 card
+        self.art_w = math.min(L.cover_w, math.floor(L.cover_h * 2 / 3))
+        self.art_h = math.min(L.cover_h, math.floor(self.art_w * 3 / 2))
     end
     self.pattern_i = Paint.hash(self.title or "") % #Paint.patterns + 1
 end
@@ -374,20 +420,22 @@ function Tile:paintTo(bb, x, y)
     self.dimen.x, self.dimen.y = x, y
     local L = self.L
     local B = L.border
-    local w = self.width
-    local cx, cy = x + B, y + B
+    local fw, fh = self.art_w + 2 * B, self.art_h + 2 * B
+    local fx = x + math.floor((self.width - fw) / 2)
+    local fy = y + L.box_h - fh
+    local cx, cy = fx + B, fy + B
 
-    -- Cover area: real cover (cropped to fill) or a pixel pattern
-    bb:paintRect(cx, cy, L.cover_w, L.cover_h, Theme.paper)
+    -- The whole cover, or a pixel pattern
     if self.cover_bb then
-        bb:blitFrom(self.cover_bb, cx, cy, self.crop_x, self.crop_y, L.cover_w, L.cover_h)
+        bb:blitFrom(self.cover_bb, cx, cy, 0, 0, self.art_w, self.art_h)
     else
-        Paint.pattern(bb, self.pattern_i, cx, cy, L.cover_w, L.cover_h, px(1), Theme.pattern)
+        bb:paintRect(cx, cy, self.art_w, self.art_h, Theme.paper)
+        Paint.pattern(bb, self.pattern_i, cx, cy, self.art_w, self.art_h, px(1), Theme.pattern)
         if self.is_dir then
             local cell = px(4)
             local bw, bh = #FOLDER[1] * cell, #FOLDER * cell
-            local bx = cx + math.floor((L.cover_w - bw) / 2)
-            local by = cy + math.floor((L.cover_h - bh) / 2)
+            local bx = cx + math.floor((self.art_w - bw) / 2)
+            local by = cy + math.floor((self.art_h - bh) / 2)
             Paint.notchedFill(bb, bx - px(6), by - px(6), bw + px(12), bh + px(12), Theme.paper, px(3))
             Paint.bitmap(bb, bx, by, FOLDER, cell, Theme.ink)
         end
@@ -403,29 +451,24 @@ function Tile:paintTo(bb, x, y)
         tag:free()
     end
 
-    -- Rule, then the title strip (inverted for the book you're reading)
-    local ry = cy + L.cover_h
-    bb:paintRect(cx, ry, L.cover_w, L.rule, Theme.ink)
-    local sy = ry + L.rule
-    local fg = Theme.ink
-    if self.is_current then
-        bb:paintRect(cx, sy, L.cover_w, L.strip_h, Theme.ink)
-        fg = Theme.paper
-    else
-        bb:paintRect(cx, sy, L.cover_w, L.strip_h, Theme.paper)
-    end
-    local t = text(Theme.upper(self.title or ""), Theme.face("vt", 15.5), fg, L.cover_w - 2 * px(5))
-    t:paintTo(bb, cx + px(5), sy + math.floor((L.strip_h - t:getSize().h) / 2))
+    Paint.notchedBorder(bb, fx, fy, fw, fh, B, Theme.ink, B)
+
+    -- Title under the cover, up to two lines (white on black for the book you're reading)
+    local ty = y + L.box_h + L.gap
+    local pad = self.is_current and px(3) or 0
+    local fg, bg = Theme.ink, Theme.paper
+    if self.is_current then fg, bg = Theme.paper, Theme.ink end
+    local t = textLines(Theme.upper(self.title or ""), L.title_face, fw - 2 * pad, 2, fg, bg)
+    local t_h = math.min(t:getSize().h, L.title_h)
+    if self.is_current then bb:paintRect(fx, ty, fw, t_h, Theme.ink) end
+    t:paintTo(bb, fx + pad, ty)
     t:free()
 
-    -- The notched frame on top of everything
-    Paint.notchedBorder(bb, x, y, w, L.frame_h, B, Theme.ink, B)
-
-    -- Under the tile: progress blocks and a label
-    local uy = y + L.frame_h + px(3)
-    local label = text(self:_progressLabel(), Theme.face("vt", 15), Theme.ink)
+    -- Progress blocks and a label, as wide as the cover
+    local uy = y + L.box_h + L.gap + L.title_h
+    local label = text(self:_progressLabel(), Theme.face("vt", 14), Theme.ink)
     local ls = label:getSize()
-    local cell = px(7)
+    local cell = px(6)
     if not self.is_dir then
         local filled = 0
         if self.status == "complete" then filled = 5
@@ -433,19 +476,204 @@ function Tile:paintTo(bb, x, y)
             filled = math.floor(self.percent * 5 + 0.5)
             if filled == 0 and self.percent > 0 then filled = 1 end -- started = one block
         end
-        local bx = x + px(1)
         local by = uy + label:getBaseline() - cell - px(0.5)
         for i = 1, 5 do
             local color = i <= filled and Theme.ink or Blitbuffer.Color8(0xC8)
-            bb:paintRect(bx + (i - 1) * (cell + px(2)), by, cell, cell, color)
+            bb:paintRect(fx + (i - 1) * (cell + px(2)), by, cell, cell, color)
         end
     end
-    label:paintTo(bb, x + w - ls.w - px(1), uy)
+    label:paintTo(bb, fx + fw - ls.w, uy)
     label:free()
 
     if self.dim then
-        bb:lightenRect(x, y, w, self.height, 0.6)
+        bb:lightenRect(x, y, self.width, self.height, 0.6)
     end
+end
+
+---------------------------------------------------------------------------
+-- NOW READING: the book you're on, big, above the other books
+---------------------------------------------------------------------------
+
+--- The book to feature above the grid, or nil.
+function Library.heroFile(fc)
+    if not Theme.active or not fc or fc.name ~= "filemanager" or fc.display_mode_type ~= "mosaic" then return end
+    if not G_reader_settings:nilOrTrue("pixel_now_reading") then return end
+    if Screen:getWidth() > Screen:getHeight() then return end -- portrait only
+    local file = G_reader_settings:readSetting("lastfile")
+    if not file or lfs.attributes(file, "mode") ~= "file" then return end
+    if require("ui/widget/booklist").getBookStatus(file) == "complete" then return end
+    return file
+end
+
+--- Height of the card, including the "▶ SHELF" line under it. extra: more
+-- room for the cover, when the row of books below doesn't need it.
+function Library.heroHeight(extra)
+    return px(HERO_COVER_H) + (extra or 0) + 2 * px(4) + px(12) + px(16)
+end
+
+--- The tile height a w-wide tile really uses (a typical 2:3 cover, up to a
+-- little taller), so spare room can go to the NOW READING cover instead.
+function Library.tileIdealHeight(w)
+    local L = Library.tileLayout(w, 0)
+    return math.floor(L.cover_w * 1.55) + 2 * L.border + L.gap + L.title_h + L.prog_h
+end
+
+local Hero = InputContainer:extend{
+    width = nil,
+    file = nil,
+    bim = nil,     -- CoverBrowser's BookInfoManager
+    margin = 0,    -- left/right padding, same as between tiles
+    extra_h = 0,   -- spare height the cover may use
+}
+Library.Hero = Hero
+
+function Hero:init()
+    self.height = Library.heroHeight(self.extra_h)
+    self.dimen = Geom:new{ x = 0, y = 0, w = self.width, h = self.height }
+    self.ges_events = {
+        TapHero = { GestureRange:new{ ges = "tap", range = function() return self.card_rect or self.dimen end } },
+    }
+    local file, BIM = self.file, self.bim
+    self.cover_h = px(HERO_COVER_H) + self.extra_h
+    local ch = self.cover_h
+    local cw = math.floor(ch * HERO_COVER_W / HERO_COVER_H)
+
+    -- Cover from CoverBrowser's cache; extract it now if it's missing or too small
+    local info = BIM and BIM:getBookInfo(file, true)
+    local want = { max_cover_w = cw + px(10), max_cover_h = ch + px(10) }
+    if BIM and (not info or not info.cover_fetched
+            or (info.has_cover and BIM.isCachedCoverInvalid(info, want))) then
+        if info and info.cover_bb then info.cover_bb:free() end
+        pcall(BIM.extractBookInfo, BIM, file, want)
+        info = BIM:getBookInfo(file, true)
+    end
+    info = info or {}
+    if info.has_cover and not info.ignore_cover and info.cover_bb then
+        self.cover_bb = fitCover(info.cover_bb, cw, ch)
+    elseif info.cover_bb then
+        info.cover_bb:free()
+    end
+
+    local name = (file:match("([^/]+)$") or ""):gsub("%.[%w]+$", "")
+    local title = (not info.ignore_meta and info.title) or name:match("^.-%s+%-%s+(.+)$") or name
+    self.title = Theme.upper(Library.shortTitle(title))
+    local authors = (not info.ignore_meta and info.authors) or name:match("^(.-)%s+%-%s+.+$") or ""
+    self.author = Theme.upper((authors:gsub("\n.*", "")))
+
+    local BookList = require("ui/widget/booklist")
+    self.percent = math.max(0, math.min(1, BookList.getBookInfo(file).percent_finished or 0))
+    local ok, ds = pcall(BookList.getDocSettings, file)
+    local where = ok and ds and ds:readSetting("pixel_where")
+    if type(where) == "table" and where.minutes then
+        local ch_label = (where.chapter and where.chapter ~= "") and (where.chapter .. " · ") or ""
+        self.meta = ch_label .. where.minutes .. " MIN LEFT"
+    else
+        self.meta = "LAST READ"
+    end
+end
+
+function Hero:getSize() return Geom:new{ w = self.width, h = self.height } end
+
+function Hero:free()
+    if self.cover_bb then
+        self.cover_bb:free()
+        self.cover_bb = nil
+    end
+end
+
+function Hero:paintTo(bb, x, y)
+    self.dimen.x, self.dimen.y = x, y
+    local m, B = self.margin, px(4)
+    local ch = self.cover_h
+    local aw, ah
+    if self.cover_bb then
+        aw, ah = self.cover_bb:getWidth(), self.cover_bb:getHeight()
+    else
+        aw, ah = math.floor(ch * 2 / 3), ch
+    end
+    local fw, fh = aw + 2 * B, ah + 2 * B
+    local area_h = ch + 2 * B
+    local fx, fy = x + m, y + area_h - fh
+
+    -- The cover
+    if self.cover_bb then
+        bb:blitFrom(self.cover_bb, fx + B, fy + B, 0, 0, aw, ah)
+    else
+        bb:paintRect(fx + B, fy + B, aw, ah, Theme.paper)
+        Paint.pattern(bb, Paint.hash(self.title) % #Paint.patterns + 1, fx + B, fy + B, aw, ah, px(1), Theme.pattern)
+    end
+    Paint.notchedBorder(bb, fx, fy, fw, fh, B, Theme.ink, B)
+
+    -- Info next to it, bottom-aligned with the cover
+    local ix = fx + fw + px(16)
+    local iw = x + self.width - m - ix
+    local chip = text("▶ NOW READING", Theme.face("vt", 14), Theme.paper)
+    local title = textLines(self.title, Theme.face("vt", 30), iw, 2)
+    local author = self.author ~= "" and text(self.author, Theme.face("vt", 15), Theme.muted, iw) or nil
+    local meta = text(self.meta, Theme.face("vt", 15), Theme.ink, iw)
+    local pct_n = math.floor(self.percent * 100 + 0.5)
+    if pct_n == 0 and self.percent > 0 then pct_n = 1 end
+    local pct = text(pct_n .. "%", Theme.face("vt", 15), Theme.ink)
+    local btn = text("CONTINUE ▶", Theme.face("vt", 16), Theme.ink)
+
+    local gap = px(5)
+    local chip_h = chip:getSize().h + px(2)
+    local cell = px(10)
+    local bar_h = math.max(cell, pct:getSize().h)
+    local btn_h = btn:getSize().h + px(6)
+    local total = chip_h + gap + title:getSize().h + (author and (px(2) + author:getSize().h) or 0)
+        + gap + meta:getSize().h + gap + bar_h + px(8) + btn_h
+    local cy = y + area_h - total
+
+    local cs = chip:getSize()
+    Paint.notchedFill(bb, ix, cy, cs.w + 2 * px(6), chip_h, Theme.ink, px(3))
+    chip:paintTo(bb, ix + px(6), cy + px(1))
+    cy = cy + chip_h + gap
+    title:paintTo(bb, ix, cy)
+    cy = cy + title:getSize().h
+    if author then
+        cy = cy + px(2)
+        author:paintTo(bb, ix, cy)
+        cy = cy + author:getSize().h
+    end
+    cy = cy + gap
+    meta:paintTo(bb, ix, cy)
+    cy = cy + meta:getSize().h + gap
+    -- Ten blocks of progress
+    local filled = math.floor(self.percent * 10 + 0.5)
+    if filled == 0 and self.percent > 0 then filled = 1 end
+    local by = cy + math.floor((bar_h - cell) / 2)
+    for i = 1, 10 do
+        local color = i <= filled and Theme.ink or Blitbuffer.Color8(0xC8)
+        bb:paintRect(ix + (i - 1) * (cell + px(2)), by, cell, cell, color)
+    end
+    pct:paintTo(bb, ix + 10 * (cell + px(2)) + px(6), cy + math.floor((bar_h - pct:getSize().h) / 2))
+    cy = cy + bar_h + px(8)
+    local bs = btn:getSize()
+    local bw = bs.w + 2 * px(8)
+    Paint.notchedBorder(bb, ix, cy, bw, btn_h, px(2), Theme.ink, px(3))
+    btn:paintTo(bb, ix + px(8), cy + px(3))
+
+    self.card_rect = Geom:new{ x = x, y = y, w = self.width, h = area_h }
+    chip:free(); title:free(); if author then author:free() end
+    meta:free(); pct:free(); btn:free()
+
+    -- "▶ SHELF" and a dashed line, over the other books
+    local sy = y + area_h + px(12)
+    local shelf = text("▶ SHELF", Theme.face("vt", 15), Theme.ink)
+    local ss = shelf:getSize()
+    shelf:paintTo(bb, x + m, sy)
+    local lx = x + m + ss.w + px(8)
+    Paint.dashes(bb, lx, sy + math.floor(ss.h / 2), x + self.width - m - lx, px(2), px(5), px(3), Theme.ink)
+    shelf:free()
+end
+
+function Hero:onTapHero()
+    local fm = require("apps/filemanager/filemanager").instance
+    if fm then
+        require("apps/filemanager/filemanagerutil").openFile(fm, self.file)
+    end
+    return true
 end
 
 ---------------------------------------------------------------------------
