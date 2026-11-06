@@ -36,7 +36,7 @@ local FONTS = {
     { face = "Space Mono",    label = "space-mono", file = "pixel/SpaceMono-Regular.ttf",   natural = 1.48 },
     { face = "Noto Serif",    label = "noto-serif", file = "noto/NotoSerif-Regular.ttf",    natural = 1.36 },
 }
-local SIZES = { 18.5, 20, 22, 23.5, 26 }  -- the mock-up's 11.5 .. 16 px
+local SIZES = { 15, 16.5, 18, 19.5, 21 }  -- smaller than the mock-up: easier on a 6" screen
 local SPACINGS = { { "TIGHT", 1.45 }, { "NORMAL", 1.6 }, { "LOOSE", 1.8 } }
 
 local Options = InputContainer:extend{

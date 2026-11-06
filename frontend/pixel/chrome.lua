@@ -201,7 +201,7 @@ local function applyDefaults(Theme)
     local unit = Screen:scaleBySize(1000) / 1000 -- KOReader margins are in scaled px
     local function margin(mockup_px) return math.floor(Theme.px(mockup_px) / unit + 0.5) end
     G_reader_settings:saveSetting("cre_font", "IBM Plex Mono")
-    G_reader_settings:saveSetting("copt_font_size", 22)
+    G_reader_settings:saveSetting("copt_font_size", 18)
     G_reader_settings:saveSetting("copt_line_spacing", 125)
     G_reader_settings:saveSetting("copt_h_page_margins", { margin(24), margin(24) })
     G_reader_settings:saveSetting("copt_sync_t_b_page_margins", 0)
