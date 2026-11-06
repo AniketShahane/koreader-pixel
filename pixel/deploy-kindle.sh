@@ -4,6 +4,9 @@
 #   pixel/deploy-kindle.sh                    build for Kindles on firmware 5.16.3 or newer
 #   pixel/deploy-kindle.sh pw2                build for older firmware (below 5.16.3)
 #   pixel/deploy-kindle.sh hf /Volumes/Kindle build, then copy onto a plugged-in Kindle
+#                                         (older USB-drive Kindles only; MTP Kindles such as
+#                                         the 2024 Paperwhite: copy the koreader folder with OpenMTP,
+#                                         see KINDLE-SETUP.md)
 #
 # It takes the official KOReader download of the SAME version this fork is
 # based on (v2026.07.2-311, saved in vendor/), lays the Pixel code and fonts

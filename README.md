@@ -57,20 +57,22 @@ For Explain, run `export ANTHROPIC_API_KEY=sk-ant-...` first, or add a key in
 
 ## Put it on a Kindle
 
-You need a jailbroken Kindle with KUAL and MRPI (see <https://kindlemodding.org>).
+**Full step-by-step guide: [KINDLE-SETUP.md](KINDLE-SETUP.md)**: jailbreak (Véra), install, and how to undo it. It's written for a Paperwhite 12th gen on firmware 5.20.1, and most of it applies to other recent Kindles.
 
-1. Download `koreader-pixel-kindlehf.zip` (firmware 5.16.3 or newer) or
+In short:
+
+1. Jailbreak the Kindle (see [kindlemodding.org](https://kindlemodding.org/jailbreak-wizard.html) for which method fits).
+2. On the Kindle, type `;kpm install koreader` in the search bar to install official KOReader.
+3. Download `koreader-pixel-kindlehf.zip` (firmware 5.16.3 or newer) or
    `koreader-pixel-kindlepw2.zip` (older firmware) from
-   [Releases](https://github.com/AniketShahane/koreader-pixel/releases).
-   You can also build them yourself: `pixel/deploy-kindle.sh` or `pixel/deploy-kindle.sh pw2`.
-2. Unzip it onto the Kindle's root folder over USB (it adds `koreader/` and
-   `extensions/`). Or plug the Kindle in and run `pixel/deploy-kindle.sh hf /Volumes/Kindle`.
-3. On the Kindle, open **KUAL > KOReader**.
-4. For Explain, put a text file named `claude_api_key.txt`, containing only
+   [Releases](https://github.com/AniketShahane/koreader-pixel/releases), or build it with `pixel/deploy-kindle.sh`.
+4. Replace the Kindle's `koreader` folder with the one from the zip. Newer Kindles use
+   MTP, so copy with [OpenMTP](https://openmtp.ganeshrvel.com) (they don't show up in Finder).
+5. For Explain, put a text file named `claude_api_key.txt`, containing only
    your key, in the `koreader` folder on the Kindle.
-5. For the dictionary: **Settings > Dictionary settings > Download dictionaries**
+6. For the dictionary: **Settings > Dictionary settings > Download dictionaries**
    (for example WordNet, for English).
-6. Add **DRM-free** books (EPUB etc.) to `documents`. Books bought from Amazon are locked and won't open.
+7. Add **DRM-free** books (EPUB etc.) to `documents`. Books bought from Amazon are locked and won't open.
 
 ## Explain and Claude
 
