@@ -226,6 +226,7 @@ function Header:onTapHeader(_, ges)
     for _, t in ipairs(self.tab_rects or {}) do
         if inside(pos, t.rect) then
             local FileChooser = require("ui/widget/filechooser")
+            require("pixel/transition").mark("swap")
             FileChooser.show_filter.status = t.tab.status and util.tableDeepCopy(t.tab.status) or nil
             self.fm.file_chooser:refreshPath()
             UIManager:setDirty(self.show_parent, "ui", self.dimen)

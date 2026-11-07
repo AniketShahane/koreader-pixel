@@ -104,6 +104,8 @@ function Theme.install()
     local ok, err = pcall(function() require("pixel/chrome").install(Theme) end)
     if ok then
         Theme.active = true
+        local ok2, err2 = pcall(function() require("pixel/transition").install() end)
+        if not ok2 then require("logger").err("Pixel transitions failed to install:", err2) end
     else
         -- Never let a theme bug stop KOReader from starting.
         require("logger").err("Pixel theme failed to install:", err)

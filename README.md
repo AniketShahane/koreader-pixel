@@ -40,6 +40,12 @@ sentence of that book*.
   folder's link in `koreader/gdrive_folder.txt`, or set it in
   **Settings > Pixel theme > Google Drive sync**. It only adds books (EPUB, PDF,
   HTML, MOBI, AZW3, FB2, DJVU, CBZ, TXT, DOCX…); it never deletes or overwrites.
+- **Halftone transitions:** popups, menus, library pages, opening a book and
+  page turns break into ink dots on the way out and build up from dots on the
+  way in. Only the part of the screen that changes gets dots. Frames use
+  the fast black-and-white e-ink refresh, then one normal refresh brings the
+  greys back. Switch them off (popups/menus and page turns separately) in
+  **Settings > Pixel theme > Halftone transitions**.
 - **Sleep screen:** the cover of the book as big halftone dots that fade into the page, with the title, chapter
   and a progress bar.
 - **Everything else:** pixel fonts, notched corners, pixel icons and capital

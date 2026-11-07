@@ -519,6 +519,23 @@ function Pixel:addToMainMenu(menu_items)
                 callback = toggle("pixel_options_menu"),
             },
             {
+                text = _("Halftone transitions"),
+                sub_item_table = {
+                    {
+                        text = _("Popups, menus and screens"),
+                        help_text = _("Things break into ink dots when they close and build up from dots when they open."),
+                        checked_func = on("pixel_transitions"),
+                        callback = toggle("pixel_transitions"),
+                    },
+                    {
+                        text = _("Page turns"),
+                        help_text = _("The page dots away and the next one dots in. Adds a moment to every page turn."),
+                        checked_func = on("pixel_transitions_pages"),
+                        callback = toggle("pixel_transitions_pages"),
+                    },
+                },
+            },
+            {
                 text = _("Pixel sleep screen"),
                 checked_func = function() return G_reader_settings:readSetting("screensaver_type") == "pixel" end,
                 callback = function()

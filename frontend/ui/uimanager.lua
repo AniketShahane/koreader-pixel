@@ -1371,6 +1371,11 @@ function UIManager:_repaint()
         self:_refresh("partial")
     end
 
+    -- Pixel theme: a transition may play here, between painting and refreshing (frontend/pixel/transition.lua)
+    if self.beforeRefreshHook and self._refresh_stack[1] then
+        self.beforeRefreshHook(self._refresh_stack)
+    end
+
     -- execute refreshes:
     for _, refresh in ipairs(self._refresh_stack) do
         -- Honor dithering hints from *anywhere* in the dirty stack
