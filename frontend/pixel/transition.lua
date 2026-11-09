@@ -38,9 +38,9 @@ local Transition = {
     installed = false,
     pending = nil,
     playing = false,
-    FRAME_S = 0.09,   -- shortest time a frame stays up (the e-ink is usually slower anyway)
-    POPUP_STEPS = 5,  -- 4 dot frames for a popup opening or closing
-    SWAP_STEPS = 4,   -- 3 out + 3 in when a screen or menu page changes
+    FRAME_S = 0.04,   -- shortest time a frame stays up (the e-ink is usually slower anyway)
+    POPUP_STEPS = 3,  -- 2 dot frames for a popup opening or closing
+    SWAP_STEPS = 3,   -- 2 out + 2 in when a screen or menu page changes
     PAGE_STEPS = 2,   -- page turns: ONE dot frame of the new page, then the clean page
     MAX_AGE_S = 4,    -- forget a mark if nothing got painted after it
 }
