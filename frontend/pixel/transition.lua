@@ -41,7 +41,7 @@ local Transition = {
     FRAME_S = 0.09,   -- shortest time a frame stays up (the e-ink is usually slower anyway)
     POPUP_STEPS = 5,  -- 4 dot frames for a popup opening or closing
     SWAP_STEPS = 4,   -- 3 out + 3 in when a screen or menu page changes
-    PAGE_STEPS = 3,   -- 2 dot frames out + 2 in for page turns
+    PAGE_STEPS = 2,   -- page turns: ONE dot frame of the new page, then the clean page
     MAX_AGE_S = 4,    -- forget a mark if nothing got painted after it
 }
 
@@ -77,7 +77,7 @@ function Transition.mark(kind, group)
             p.kind = "swap"
             if p.steps == Transition.POPUP_STEPS then p.steps = Transition.SWAP_STEPS end
         end
-        if group == "page" then p.steps = Transition.PAGE_STEPS end
+        if group == "page" then p.steps = Transition.PAGE_STEPS; p.page = true end
         return
     end
     if p then Transition.drop() end
@@ -87,6 +87,7 @@ function Transition.mark(kind, group)
         kind = kind,
         snap = snap,
         at = time.now(),
+        page = group == "page",
         steps = group == "page" and Transition.PAGE_STEPS
             or (kind == "swap" and Transition.SWAP_STEPS or Transition.POPUP_STEPS),
     }
@@ -151,6 +152,27 @@ local function summedDiff(a, b)
         end
     end
     return { sat = sat, w = w, h = h, w1 = w1 }
+end
+
+-- Both tables in one pass over the screen (summed of `a`, and "changed vs b").
+local function summedWithDiff(a, b)
+    local w, h = a.w, a.h
+    local w1 = w + 1
+    local sat = ffi.new("uint32_t[?]", w1 * (h + 1))
+    local dif = ffi.new("uint32_t[?]", w1 * (h + 1))
+    local da, db, sa, sb = ffi.cast(u8p, a.data), ffi.cast(u8p, b.data), a.stride, b.stride
+    for y = 0, h - 1 do
+        local row, drow, pa, pb, o1, o0 = 0, 0, da + y * sa, db + y * sb, (y + 1) * w1, y * w1
+        for x = 0, w - 1 do
+            local va = pa[x]
+            local d = va - pb[x]
+            row = row + va
+            if d > 12 or d < -12 then drow = drow + 1 end
+            sat[o1 + x + 1] = sat[o0 + x + 1] + row
+            dif[o1 + x + 1] = dif[o0 + x + 1] + drow
+        end
+    end
+    return { sat = sat, w = w, h = h, w1 = w1 }, { sat = dif, w = w, h = h, w1 = w1 }
 end
 
 local function cellAverage(S, x0, y0, x1, y1)
@@ -244,6 +266,17 @@ local function play(p, x, y, w, h)
     local K = p.steps
     local seed = floor(time.to_ms(time.now())) % 9973
     local at = time.now()
+    if p.page then
+        -- Page turns: one frame of the new page as dots, nothing else.
+        local S, D = summedWithDiff(new, old)
+        Screen:refreshWaitForLast()
+        frame:fill(Blitbuffer.COLOR_WHITE)
+        drawDots(frame, S, 0.5, seed, sizes, D, new)
+        showFrame(frame, x, y, w, h, at)
+        Screen.bb:blitFrom(new, x, y, 0, 0, w, h)
+        old:free(); new:free(); frame:free()
+        return
+    end
     local D = summedDiff(old, new)
     Screen:refreshWaitForLast()
 
@@ -296,6 +329,11 @@ function Transition.beforeRefresh(refresh_stack)
             local ok, err = pcall(play, p, x0, y0, w, h)
             Transition.playing = false
             if not ok then logger.warn("Pixel transition failed:", err) end
+            -- The fast black-and-white frames leave specks behind; a flashing
+            -- refresh of the same area wipes them, so the end picture is clean.
+            for _, r in ipairs(refresh_stack) do
+                if not r.mode:find("flash") and r.mode ~= "full" then r.mode = "flashui" end
+            end
         end
     end
     p.snap:free()
