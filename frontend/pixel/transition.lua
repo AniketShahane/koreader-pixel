@@ -8,16 +8,10 @@ How it works
 * KOReader paints the new state into the screen buffer as usual. Just before
   it refreshes the e-ink, UIManager calls `beforeRefresh` (one line added to
   ui/uimanager.lua). We now have the old picture and the new picture.
-* We play a few frames of dots over the changed area with the fast
+* We flash ONE frame of dots over the changed area with the fast
   black-and-white "a2" refresh, put the real new picture back, and let
-  KOReader's normal refresh run. That last refresh brings the greys back and
-  cleans up any ghosting.
-
-Kinds
-* "in"   a popup opens: the popup forms out of dots over the page.
-* "out"  a popup closes: the popup breaks into dots over the page.
-* "swap" the whole thing changes (page turn, menu page, full-screen screen):
-         the old picture dots away, the new one dots in.
+  KOReader's refresh run, made a flashing one so it wipes the specks that
+  a2 leaves behind. So every transition is: dots, then the clean picture.
 
 Settings > Pixel theme > Halftone transitions switches each group on or off.
 ]]
@@ -25,23 +19,16 @@ Settings > Pixel theme > Halftone transitions switches each group on or off.
 local Device = require("device")
 local Blitbuffer = require("ffi/blitbuffer")
 local ffi = require("ffi")
-local ffiUtil = require("ffi/util")
 local logger = require("logger")
 local time = require("ui/time")
 local Screen = Device.screen
 
-local bit = require("bit")
-local band, bxor, rshift, tobit = bit.band, bit.bxor, bit.rshift, bit.tobit
 local floor, sqrt, min, max = math.floor, math.sqrt, math.min, math.max
 
 local Transition = {
     installed = false,
     pending = nil,
     playing = false,
-    FRAME_S = 0.04,   -- shortest time a frame stays up (the e-ink is usually slower anyway)
-    POPUP_STEPS = 3,  -- 2 dot frames for a popup opening or closing
-    SWAP_STEPS = 3,   -- 2 out + 2 in when a screen or menu page changes
-    PAGE_STEPS = 2,   -- page turns: ONE dot frame of the new page, then the clean page
     MAX_AGE_S = 4,    -- forget a mark if nothing got painted after it
 }
 
@@ -73,11 +60,7 @@ function Transition.mark(kind, group)
     if p and time.to_s(time.now() - p.at) < Transition.MAX_AGE_S then
         -- Several changes before one repaint (close one popup, open another):
         -- keep the oldest picture, and play it as one swap.
-        if p.kind ~= kind then
-            p.kind = "swap"
-            if p.steps == Transition.POPUP_STEPS then p.steps = Transition.SWAP_STEPS end
-        end
-        if group == "page" then p.steps = Transition.PAGE_STEPS; p.page = true end
+        if p.kind ~= kind then p.kind = "swap" end
         return
     end
     if p then Transition.drop() end
@@ -87,9 +70,6 @@ function Transition.mark(kind, group)
         kind = kind,
         snap = snap,
         at = time.now(),
-        page = group == "page",
-        steps = group == "page" and Transition.PAGE_STEPS
-            or (kind == "swap" and Transition.SWAP_STEPS or Transition.POPUP_STEPS),
     }
 end
 
@@ -103,14 +83,6 @@ end
 -- The dots
 ---------------------------------------------------------------------------
 
-local function rnd(a, b, s)
-    local h = bxor(tobit(a * 374761393), tobit(b * 668265263), tobit(s * 1442695041))
-    h = bxor(h, rshift(h, 13))
-    h = tobit(h * 1274126177)
-    h = bxor(h, rshift(h, 16))
-    return band(h, 0xFFFFFF) / 16777216
-end
-
 local u8p = ffi.typeof("uint8_t*")
 
 -- A plain 8-bit grey copy of one screen rectangle (no rotation, no inversion).
@@ -120,116 +92,48 @@ local function grab(src, x, y, w, h)
     return bb
 end
 
--- Summed-area table of a grey buffer, so any cell's average is 4 lookups.
-local function summed(bb)
-    local w, h = bb.w, bb.h
-    local w1 = w + 1
-    local sat = ffi.new("uint32_t[?]", w1 * (h + 1))
-    local data, stride = ffi.cast(u8p, bb.data), bb.stride
-    for y = 0, h - 1 do
-        local row, src, o1, o0 = 0, data + y * stride, (y + 1) * w1, y * w1
-        for x = 0, w - 1 do
-            row = row + src[x]
-            sat[o1 + x + 1] = sat[o0 + x + 1] + row
-        end
-    end
-    return { sat = sat, w = w, h = h, w1 = w1 }
+-- Dot cell size in device pixels: 16 on the 615 px wide design, so 32 on a Paperwhite.
+local function cellSize()
+    return max(4, floor(16 * min(Screen:getWidth(), Screen:getHeight()) / 615 + 0.5))
 end
 
--- Summed table of "this pixel changed", so unchanged parts (a header that
--- stays put) are left alone instead of turning into dots.
-local function summedDiff(a, b)
-    local w, h = a.w, a.h
-    local w1 = w + 1
-    local sat = ffi.new("uint32_t[?]", w1 * (h + 1))
-    local da, db, sa, sb = ffi.cast(u8p, a.data), ffi.cast(u8p, b.data), a.stride, b.stride
-    for y = 0, h - 1 do
-        local row, pa, pb, o1, o0 = 0, da + y * sa, db + y * sb, (y + 1) * w1, y * w1
-        for x = 0, w - 1 do
-            local d = pa[x] - pb[x]
-            if d > 12 or d < -12 then row = row + 1 end
-            sat[o1 + x + 1] = sat[o0 + x + 1] + row
-        end
-    end
-    return { sat = sat, w = w, h = h, w1 = w1 }
-end
-
--- Both tables in one pass over the screen (summed of `a`, and "changed vs b").
-local function summedWithDiff(a, b)
-    local w, h = a.w, a.h
-    local w1 = w + 1
-    local sat = ffi.new("uint32_t[?]", w1 * (h + 1))
-    local dif = ffi.new("uint32_t[?]", w1 * (h + 1))
-    local da, db, sa, sb = ffi.cast(u8p, a.data), ffi.cast(u8p, b.data), a.stride, b.stride
-    for y = 0, h - 1 do
-        local row, drow, pa, pb, o1, o0 = 0, 0, da + y * sa, db + y * sb, (y + 1) * w1, y * w1
-        for x = 0, w - 1 do
-            local va = pa[x]
-            local d = va - pb[x]
-            row = row + va
-            if d > 12 or d < -12 then drow = drow + 1 end
-            sat[o1 + x + 1] = sat[o0 + x + 1] + row
-            dif[o1 + x + 1] = dif[o0 + x + 1] + drow
-        end
-    end
-    return { sat = sat, w = w, h = h, w1 = w1 }, { sat = dif, w = w, h = h, w1 = w1 }
-end
-
-local function cellAverage(S, x0, y0, x1, y1)
-    local s, w1 = S.sat, S.w1
-    return (s[y1 * w1 + x1] - s[y0 * w1 + x1] - s[y1 * w1 + x0] + s[y0 * w1 + x0]) / ((x1 - x0) * (y1 - y0))
-end
-
--- Cell sizes in device pixels, from the 615 px wide design (x2 on a Paperwhite).
-local function cellSizes()
-    local s = min(Screen:getWidth(), Screen:getHeight()) / 615
-    local out = {}
-    for i, v in ipairs({ 3, 4, 6, 8, 12 }) do out[i] = max(2, floor(v * s + 0.5)) end
-    return out
-end
-
-local function snap(v, list)
-    local best, d = list[1], math.huge
-    for _, x in ipairs(list) do
-        local e = math.abs(x - v)
-        if e < d then d, best = e, x end
-    end
-    return best
-end
-
---[[ Draw the element (`S` = its summed table) as halftone dots into `frame`.
-`p` is how present it is: 1 = sharp, 0 = gone. Cells that are gone keep
-whatever `frame` already holds (the background). Same maths as the demo page. ]]
-local function drawDots(frame, S, p, seed, sizes, D, keep)
-    local q = 1 - p
-    local c = snap(sizes[1] * 2 ^ (min(q / 0.6, 1) * 2), sizes)
-    local k = q <= 0.6 and 1 or 1 - (q - 0.6) / 0.4
-    local data, stride = ffi.cast(u8p, frame.data), frame.stride
-    local kdata, kstride = ffi.cast(u8p, keep.data), keep.stride
-    local w, h = S.w, S.h
+-- One halftone frame of `new`: every changed cell becomes one black dot, as big as
+-- the cell is dark. Cells that did not change (a header that stays put) are copied
+-- as they are. Each cell is read on a sparse grid (every 3rd pixel), so this is quick.
+local function drawDots(frame, new, old, c)
+    local w, h = new.w, new.h
+    local fd, fs = ffi.cast(u8p, frame.data), frame.stride
+    local nd, ns = ffi.cast(u8p, new.data), new.stride
+    local od, os = ffi.cast(u8p, old.data), old.stride
     local half = c / 2
-    local cy = 0
     for y0 = 0, h - 1, c do
         local bh = min(c, h - y0)
-        local cx = 0
         for x0 = 0, w - 1, c do
             local bw = min(c, w - x0)
-            local d = 1 - cellAverage(S, x0, y0, x0 + bw, y0 + bh) / 255
-            local s1, w1 = D.sat, D.w1
-            local changed = s1[(y0 + bh) * w1 + x0 + bw] - s1[y0 * w1 + x0 + bw] - s1[(y0 + bh) * w1 + x0] + s1[y0 * w1 + x0] > 0
-            if not changed then
-                for yy = 0, bh - 1 do
-                    ffi.copy(data + (y0 + yy) * stride + x0, kdata + (y0 + yy) * kstride + x0, bw)
+            local sum, n, changed = 0, 0, false
+            for yy = y0 + 1, y0 + bh - 1, 3 do
+                local nr, orow = nd + yy * ns, od + yy * os
+                for xx = x0 + 1, x0 + bw - 1, 3 do
+                    local v = nr[xx]
+                    sum = sum + v
+                    n = n + 1
+                    local d = v - orow[xx]
+                    if d > 12 or d < -12 then changed = true end
                 end
-            elseif rnd(cx, cy, seed) * 0.6 + (1 - d) * 0.4 < k then
-                local rr = c * 0.72 * sqrt(d) * (0.55 + 0.45 * k)
+            end
+            if not changed or n == 0 then
+                for yy = y0, y0 + bh - 1 do
+                    ffi.copy(fd + yy * fs + x0, nd + yy * ns + x0, bw)
+                end
+            else
+                local dark = 1 - sum / n / 255
+                local rr = c * 0.72 * sqrt(dark)
                 local r2 = rr * rr
-                local mx = x0 + half
-                local my = y0 + half
-                for yy = 0, bh - 1 do
-                    local row = data + (y0 + yy) * stride
+                local mx, my = x0 + half, y0 + half
+                for yy = y0, y0 + bh - 1 do
+                    local row = fd + yy * fs
                     ffi.fill(row + x0, bw, 255)
-                    local dy = y0 + yy + 0.5 - my
+                    local dy = yy + 0.5 - my
                     local span2 = r2 - dy * dy
                     if span2 > 0 then
                         local sp = sqrt(span2)
@@ -239,9 +143,7 @@ local function drawDots(frame, S, p, seed, sizes, D, keep)
                     end
                 end
             end
-            cx = cx + 1
         end
-        cy = cy + 1
     end
 end
 
@@ -249,56 +151,16 @@ end
 -- Playing it
 ---------------------------------------------------------------------------
 
-local function showFrame(frame, x, y, w, h, last_at)
-    Screen.bb:blitFrom(frame, x, y, 0, 0, w, h)
-    Screen:refreshA2(x, y, w, h)
-    Screen:refreshWaitForLast()
-    local spent = time.to_s(time.now() - last_at)
-    if spent < Transition.FRAME_S then ffiUtil.usleep(floor((Transition.FRAME_S - spent) * 1e6)) end
-    return time.now()
-end
-
+-- One frame of dots with the fast "a2" refresh, then the real picture goes back
+-- into the buffer. We don't wait for the panel: UIManager's flashing refresh that
+-- follows is queued behind the dots, so the dots show and then get wiped clean.
 local function play(p, x, y, w, h)
-    local sizes = cellSizes()
     local old = grab(p.snap, x, y, w, h)
     local new = grab(Screen.bb, x, y, w, h)
     local frame = Blitbuffer.new(w, h, Blitbuffer.TYPE_BB8)
-    local K = p.steps
-    local seed = floor(time.to_ms(time.now())) % 9973
-    local at = time.now()
-    if p.page then
-        -- Page turns: one frame of the new page as dots, nothing else.
-        local S, D = summedWithDiff(new, old)
-        Screen:refreshWaitForLast()
-        frame:fill(Blitbuffer.COLOR_WHITE)
-        drawDots(frame, S, 0.5, seed, sizes, D, new)
-        showFrame(frame, x, y, w, h, at)
-        Screen.bb:blitFrom(new, x, y, 0, 0, w, h)
-        old:free(); new:free(); frame:free()
-        return
-    end
-    local D = summedDiff(old, new)
-    Screen:refreshWaitForLast()
-
-    local function frames(el, bg, from_p, to_p, dir)
-        local S = summed(el)
-        for i = from_p, to_p, dir do
-            if bg then frame:blitFrom(bg, 0, 0, 0, 0, w, h) else frame:fill(Blitbuffer.COLOR_WHITE) end
-            drawDots(frame, S, i / K, seed, sizes, D, new)
-            at = showFrame(frame, x, y, w, h, at)
-        end
-    end
-
-    if p.kind == "in" then
-        frames(new, old, 1, K - 1, 1)          -- the popup forms over the page
-    elseif p.kind == "out" then
-        frames(old, new, K - 1, 1, -1)         -- the popup breaks up over the page
-    else
-        frames(old, nil, K - 1, 1, -1)         -- old picture dots away...
-        frames(new, nil, 1, K - 1, 1)          -- ...new one dots in
-    end
-
-    -- Put the real picture back; UIManager's own refresh shows it next.
+    drawDots(frame, new, old, cellSize())
+    Screen.bb:blitFrom(frame, x, y, 0, 0, w, h)
+    Screen:refreshA2(x, y, w, h)
     Screen.bb:blitFrom(new, x, y, 0, 0, w, h)
     old:free(); new:free(); frame:free()
 end
