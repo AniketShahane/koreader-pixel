@@ -8,10 +8,10 @@ How it works
 * KOReader paints the new state into the screen buffer as usual. Just before
   it refreshes the e-ink, UIManager calls `beforeRefresh` (one line added to
   ui/uimanager.lua). We now have the old picture and the new picture.
-* We flash ONE frame of dots over the changed area with the fast
+* We play 2-3 quick frames of dots over the changed area with the fast
   black-and-white "a2" refresh, put the real new picture back, and let
   KOReader's refresh run, made a flashing one so it wipes the specks that
-  a2 leaves behind. So every transition is: dots, then the clean picture.
+  a2 leaves behind. See SEQUENCES for the frames of each kind.
 
 Settings > Pixel theme > Halftone transitions switches each group on or off.
 ]]
@@ -23,6 +23,7 @@ local logger = require("logger")
 local time = require("ui/time")
 local Screen = Device.screen
 
+local bit = require("bit")
 local floor, sqrt, min, max = math.floor, math.sqrt, math.min, math.max
 
 local Transition = {
@@ -92,33 +93,50 @@ local function grab(src, x, y, w, h)
     return bb
 end
 
--- Dot cell size in device pixels: 16 on the 615 px wide design, so 32 on a Paperwhite.
-local function cellSize()
-    return max(4, floor(16 * min(Screen:getWidth(), Screen:getHeight()) / 615 + 0.5))
+-- Mock-up dot cell size (615 px wide design) -> device pixels (x2 on a Paperwhite).
+local function cells(n)
+    return max(3, floor(n * min(Screen:getWidth(), Screen:getHeight()) / 615 + 0.5))
 end
 
--- One halftone frame of `new`: every changed cell becomes one black dot, as big as
--- the cell is dark. Cells that did not change (a header that stays put) are copied
--- as they are. Each cell is read on a sparse grid (every 3rd pixel), so this is quick.
-local function drawDots(frame, new, old, c)
+-- A fixed pseudo-random number in [0,1) per cell, so dots don't flicker between frames.
+local function rnd(a, b, s)
+    local h = bit.bxor(bit.tobit(a * 374761393), bit.tobit(b * 668265263), bit.tobit(s * 1442695041))
+    h = bit.bxor(h, bit.rshift(h, 13))
+    h = bit.tobit(h * 1274126177)
+    h = bit.bxor(h, bit.rshift(h, 16))
+    return bit.band(h, 0xFFFFFF) / 16777216
+end
+
+-- One halftone frame. Each changed cell becomes one black dot, as big as `src` is dark
+-- there; with coverage k < 1 only some cells show (light ones go first). Cells that
+-- did not change between old and new (a header that stays put) are copied from `new`.
+-- `bg` (or white) shows where a changed cell has no dot. Cells are read on a sparse
+-- grid (every 3rd pixel), so a frame is quick to make.
+local function drawDots(frame, src, old, new, bg, c, k, seed)
     local w, h = new.w, new.h
     local fd, fs = ffi.cast(u8p, frame.data), frame.stride
+    local sd, ss = ffi.cast(u8p, src.data), src.stride
     local nd, ns = ffi.cast(u8p, new.data), new.stride
     local od, os = ffi.cast(u8p, old.data), old.stride
+    local bd, bs
+    if bg then bd, bs = ffi.cast(u8p, bg.data), bg.stride end
     local half = c / 2
+    local cy = 0
     for y0 = 0, h - 1, c do
         local bh = min(c, h - y0)
+        local cx = 0
         for x0 = 0, w - 1, c do
             local bw = min(c, w - x0)
             local sum, n, changed = 0, 0, false
-            for yy = y0 + 1, y0 + bh - 1, 3 do
-                local nr, orow = nd + yy * ns, od + yy * os
+            for yy = y0 + floor(bh / 3), y0 + bh - 1, 3 do
+                local sr, nr, orow = sd + yy * ss, nd + yy * ns, od + yy * os
                 for xx = x0 + 1, x0 + bw - 1, 3 do
-                    local v = nr[xx]
-                    sum = sum + v
+                    sum = sum + sr[xx]
                     n = n + 1
-                    local d = v - orow[xx]
-                    if d > 12 or d < -12 then changed = true end
+                    if not changed then
+                        local d = nr[xx] - orow[xx]
+                        if d > 12 or d < -12 then changed = true end
+                    end
                 end
             end
             if not changed or n == 0 then
@@ -126,24 +144,32 @@ local function drawDots(frame, new, old, c)
                     ffi.copy(fd + yy * fs + x0, nd + yy * ns + x0, bw)
                 end
             else
-                local dark = 1 - sum / n / 255
-                local rr = c * 0.72 * sqrt(dark)
-                local r2 = rr * rr
-                local mx, my = x0 + half, y0 + half
                 for yy = y0, y0 + bh - 1 do
-                    local row = fd + yy * fs
-                    ffi.fill(row + x0, bw, 255)
-                    local dy = yy + 0.5 - my
-                    local span2 = r2 - dy * dy
-                    if span2 > 0 then
-                        local sp = sqrt(span2)
-                        local xs = max(x0, floor(mx - sp + 0.5))
-                        local xe = min(x0 + bw, floor(mx + sp + 0.5))
-                        if xe > xs then ffi.fill(row + xs, xe - xs, 0) end
+                    if bd then ffi.copy(fd + yy * fs + x0, bd + yy * bs + x0, bw)
+                    else ffi.fill(fd + yy * fs + x0, bw, 255) end
+                end
+                local dark = 1 - sum / n / 255
+                if dark > 0.04 and rnd(cx, cy, seed) * 0.6 + (1 - dark) * 0.4 < k then
+                    local rr = c * 0.72 * sqrt(dark) * (0.55 + 0.45 * k)
+                    local r2 = rr * rr
+                    local mx, my = x0 + half, y0 + half
+                    for yy = y0, y0 + bh - 1 do
+                        local row = fd + yy * fs
+                        if bd then ffi.fill(row + x0, bw, 255) end
+                        local dy = yy + 0.5 - my
+                        local span2 = r2 - dy * dy
+                        if span2 > 0 then
+                            local sp = sqrt(span2)
+                            local xs = max(x0, floor(mx - sp + 0.5))
+                            local xe = min(x0 + bw, floor(mx + sp + 0.5))
+                            if xe > xs then ffi.fill(row + xs, xe - xs, 0) end
+                        end
                     end
                 end
             end
+            cx = cx + 1
         end
+        cy = cy + 1
     end
 end
 
@@ -151,20 +177,35 @@ end
 -- Playing it
 ---------------------------------------------------------------------------
 
--- One frame of dots with the fast "a2" refresh, then the real picture goes back
--- into the buffer and UIManager's flashing refresh wipes it clean. We must wait for
--- the dots to finish: otherwise the Kindle panel merges them into the flash and they
--- never show.
+-- The frames of each kind: {picture, background, mock-up cell size, coverage}.
+-- "old"/"new" are the screen before and after; nil background = white paper.
+local SEQUENCES = {
+    -- the screen changes: the old picture breaks up, the new one forms
+    swap = { { "old", nil, 8, 0.75 }, { "new", nil, 14, 0.6 }, { "new", nil, 6, 1 } },
+    -- a popup opens: it forms out of dots over the page
+    ["in"] = { { "new", "old", 14, 0.55 }, { "new", "old", 6, 1 } },
+    -- a popup closes: it breaks into dots over the page
+    out = { { "old", "new", 6, 0.9 }, { "old", "new", 14, 0.4 } },
+}
+
+-- A short run of dot frames with the fast "a2" refresh, then the real picture goes
+-- back into the buffer and UIManager's flashing refresh wipes the specks away.
+-- Each frame is drawn while the panel is still showing the one before, and we wait
+-- for each frame to finish, or the Kindle merges them and nothing shows.
 local function play(p, x, y, w, h)
-    local old = grab(p.snap, x, y, w, h)
-    local new = grab(Screen.bb, x, y, w, h)
-    local frame = Blitbuffer.new(w, h, Blitbuffer.TYPE_BB8)
-    drawDots(frame, new, old, cellSize())
-    Screen.bb:blitFrom(frame, x, y, 0, 0, w, h)
-    Screen:refreshA2(x, y, w, h)
+    local pics = { old = grab(p.snap, x, y, w, h), new = grab(Screen.bb, x, y, w, h) }
+    local frames = { Blitbuffer.new(w, h, Blitbuffer.TYPE_BB8), Blitbuffer.new(w, h, Blitbuffer.TYPE_BB8) }
+    local seed = floor(time.to_ms(time.now())) % 9973
+    for i, f in ipairs(SEQUENCES[p.kind] or SEQUENCES.swap) do
+        local frame = frames[(i - 1) % 2 + 1]
+        drawDots(frame, pics[f[1]], pics.old, pics.new, f[2] and pics[f[2]], cells(f[3]), f[4], seed)
+        Screen:refreshWaitForLast()
+        Screen.bb:blitFrom(frame, x, y, 0, 0, w, h)
+        Screen:refreshA2(x, y, w, h)
+    end
     Screen:refreshWaitForLast()
-    Screen.bb:blitFrom(new, x, y, 0, 0, w, h)
-    old:free(); new:free(); frame:free()
+    Screen.bb:blitFrom(pics.new, x, y, 0, 0, w, h)
+    pics.old:free(); pics.new:free(); frames[1]:free(); frames[2]:free()
 end
 
 --- Called by UIManager:_repaint() after painting, before refreshing.
