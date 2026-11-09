@@ -11,7 +11,10 @@ sentence of that book*.
 
 *Screenshots from the Mac simulator at Kindle Paperwhite resolution.*
 
-> **Status:** tested in the Mac simulator only, not yet on a real Kindle.
+<p align="center"><img src="pixel/screenshots/transitions.gif" width="320" alt="Halftone transitions: a page turn, then OPTIONS opening and closing"><br>
+<em>Halftone transitions: a page turn, then OPTIONS opening and closing (slowed down).</em></p>
+
+> **Status:** runs on a Kindle Paperwhite 12 (2024) and in the Mac simulator.
 > Based on KOReader nightly `v2026.07.2-311` (commit `4102790`). The original
 > KOReader README is in [README.koreader.md](README.koreader.md).
 
