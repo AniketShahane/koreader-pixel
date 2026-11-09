@@ -152,8 +152,9 @@ end
 ---------------------------------------------------------------------------
 
 -- One frame of dots with the fast "a2" refresh, then the real picture goes back
--- into the buffer. We don't wait for the panel: UIManager's flashing refresh that
--- follows is queued behind the dots, so the dots show and then get wiped clean.
+-- into the buffer and UIManager's flashing refresh wipes it clean. We must wait for
+-- the dots to finish: otherwise the Kindle panel merges them into the flash and they
+-- never show.
 local function play(p, x, y, w, h)
     local old = grab(p.snap, x, y, w, h)
     local new = grab(Screen.bb, x, y, w, h)
@@ -161,6 +162,7 @@ local function play(p, x, y, w, h)
     drawDots(frame, new, old, cellSize())
     Screen.bb:blitFrom(frame, x, y, 0, 0, w, h)
     Screen:refreshA2(x, y, w, h)
+    Screen:refreshWaitForLast()
     Screen.bb:blitFrom(new, x, y, 0, 0, w, h)
     old:free(); new:free(); frame:free()
 end
