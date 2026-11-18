@@ -66,11 +66,41 @@ end
 do
     local FileChooser = require("ui/widget/filechooser")
     local orig_gen = FileChooser.genItemTableFromPath
+    local orig_show_dir = FileChooser.show_dir
+
+    -- Folders that hold the system, KOReader itself or other apps, never books.
+    -- Skipped while the library gathers books from subfolders.
+    local NOT_BOOKS = {
+        koreader = true, extensions = true, system = true, fonts = true, dictionaries = true,
+        audible = true, voice = true, kmc = true, libkh = true, jobman = true,
+        ["lost+found"] = true,
+    }
+    local data_dir_name = require("datastorage"):getDataDir():gsub("/+$", ""):match("([^/]+)$")
+    function FileChooser:show_dir(dirname)
+        if self.pixel_flat and (NOT_BOOKS[dirname:lower()] or dirname == data_dir_name) then
+            return false
+        end
+        return orig_show_dir(self, dirname)
+    end
+
     function FileChooser:genItemTableFromPath(path)
-        local items, readable = orig_gen(self, path)
         -- Books only: folders are hidden (Settings > Pixel theme > Show folders in library
         -- brings them back), and always while a READING/DONE/NEW tab is active.
         local hide = FileChooser.show_filter.status or not G_reader_settings:isTrue("pixel_show_folders")
+        local items, readable
+        if Theme.active and self.name == "filemanager" and hide and not FileChooser.show_flat_view then
+            -- With folders hidden, books inside them (the Kindle's "documents" folder,
+            -- or any folder copied over USB) would never show up. List them all instead.
+            FileChooser.show_flat_view = true
+            self.pixel_flat = true
+            local ok, a, b = pcall(orig_gen, self, path)
+            FileChooser.show_flat_view = false
+            self.pixel_flat = nil
+            if not ok then error(a) end
+            items, readable = a, b
+        else
+            items, readable = orig_gen(self, path)
+        end
         if Theme.active and self.name == "filemanager" and type(items) == "table" then
             -- The NOW READING book is shown big above the grid, so not in it too.
             local hero = Library.heroFile(self)

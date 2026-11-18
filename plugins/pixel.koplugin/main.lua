@@ -487,7 +487,7 @@ function Pixel:addToMainMenu(menu_items)
             },
             {
                 text = _("Show folders in library"),
-                help_text = _("Off (default): the library shows only books. On: folders are shown too."),
+                help_text = _("Off (default): the library shows every book, including books inside folders. On: folders are shown and you browse into them."),
                 checked_func = function() return G_reader_settings:isTrue("pixel_show_folders") end,
                 callback = function()
                     G_reader_settings:flipNilOrFalse("pixel_show_folders")

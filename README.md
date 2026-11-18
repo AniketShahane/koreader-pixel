@@ -41,8 +41,18 @@ sentence of that book*.
 - **Google Drive sync:** tap **SYNC** in the library bar to download new books
   from one Google Drive folder (shared as "Anyone with the link"). Put the
   folder's link in `koreader/gdrive_folder.txt`, or set it in
-  **Settings > Pixel theme > Google Drive sync**. It only adds books (EPUB, PDF,
-  HTML, MOBI, AZW3, FB2, DJVU, CBZ, TXT, DOCX…); it never deletes or overwrites.
+  **Settings > Pixel theme > Google Drive sync**. It adds any file KOReader can
+  open (EPUB, PDF, TXT, DOCX, HTML, MD, RTF, ODT, MOBI, AZW, FB2, DJVU, CBZ,
+  images…). Google Docs come down as EPUB and Google Slides as PDF. It never
+  deletes or overwrites, and it tells you which files it skipped.
+- **File types:** everything stock KOReader opens. Reflowable: EPUB, FB2/FB3,
+  MOBI, AZW, PRC/PDB, DOC, DOCX, ODT, RTF, TXT, MD, HTML/XHTML, CHM.
+  Fixed layout: PDF, DjVu, XPS, CBZ/CBR/CBT, PPTX, and images (JPG, PNG, GIF,
+  WEBP, TIFF, SVG). Zipped TXT, FB2, HTML and RTF open too. AZW3 (KF8) isn't
+  supported by KOReader: convert it to EPUB with Calibre.
+- **Books in folders:** the library lists every book under the home folder,
+  including ones inside folders such as the Kindle's `documents` folder. Turn on
+  **Settings > Pixel theme > Show folders in library** to browse folders instead.
 - **Halftone transitions:** a quick ink-dot animation whenever the screen
   changes. Page turns, library pages and tabs, the top menu, opening a book
   and going home play 3 frames: the old screen breaks into small dots, then

@@ -5,6 +5,7 @@ Setup (once):
 * In Google Drive, share the folder as "Anyone with the link: Viewer".
 * Put the folder's link (or just its ID) in `koreader/gdrive_folder.txt`,
   or in Settings > Pixel theme > Google Drive sync > Folder link.
+* Google Docs and Slides in the folder are exported (Docs as EPUB, Slides as PDF).
 * Optional: a Google API key in `koreader/google_api_key.txt` makes listing
   use the official Drive API. Without one, the public folder page is read.
 
@@ -24,9 +25,26 @@ require("ssl.https")
 
 local Drive = {}
 
+-- Fallback list, used only if KOReader's document registry can't be loaded.
+-- Normally any file KOReader can open is downloaded (see isBook).
 Drive.BOOK_EXTS = {
-    epub = true, pdf = true, mobi = true, azw3 = true, fb2 = true, djvu = true,
-    cbz = true, cbr = true, txt = true, rtf = true, doc = true, docx = true, html = true, htm = true,
+    epub = true, epub3 = true, pdf = true, mobi = true, azw = true, prc = true, pdb = true,
+    fb2 = true, fb3 = true, djvu = true, djv = true, cbz = true, cbr = true, cbt = true, chm = true,
+    txt = true, md = true, rtf = true, doc = true, docx = true, docm = true, odt = true,
+    html = true, htm = true, xhtml = true, htmlz = true, xps = true, oxps = true, pptx = true,
+    jpg = true, jpeg = true, png = true, gif = true, webp = true, tif = true, tiff = true, svg = true,
+}
+
+-- Google Docs and Slides have no file to download: Drive exports them.
+-- Docs become EPUB (reflowable, like a book), Slides become PDF.
+-- https://developers.google.com/drive/api/guides/ref-export-formats
+Drive.GOOGLE_EXPORTS = {
+    document = { mime = "application/epub+zip", ext = "epub", url = "https://docs.google.com/document/d/%s/export?format=epub" },
+    presentation = { mime = "application/pdf", ext = "pdf", url = "https://docs.google.com/presentation/d/%s/export/pdf" },
+}
+local GOOGLE_MIME_KIND = {
+    ["application/vnd.google-apps.document"] = "document",
+    ["application/vnd.google-apps.presentation"] = "presentation",
 }
 
 local function readFirstLine(path)
@@ -132,7 +150,8 @@ function Drive.list(folder_id, key)
             if not ok or type(data) ~= "table" then return nil, "bad reply from Drive" end
             for _, f in ipairs(data.files or {}) do
                 if f.mimeType ~= "application/vnd.google-apps.folder" then
-                    table.insert(files, { id = f.id, name = f.name, size = tonumber(f.size) })
+                    table.insert(files, { id = f.id, name = f.name, size = tonumber(f.size),
+                        google = GOOGLE_MIME_KIND[f.mimeType] })
                 end
             end
             page = data.nextPageToken
@@ -158,7 +177,10 @@ function Drive.list(folder_id, key)
         local name = chunk:match('class="flip%-entry%-title"[^>]*>(.-)</div>')
         local is_folder = chunk:find("/folders/", 1, true) ~= nil
         if name and not is_folder then
-            table.insert(files, { id = s.id, name = util.trim(htmlUnescape(name)) })
+            -- Google Docs/Slides link to docs.google.com/document/d/ID or /presentation/d/ID
+            local google = chunk:match("docs%.google%.com/(%a+)/d/")
+            table.insert(files, { id = s.id, name = util.trim(htmlUnescape(name)),
+                google = google and Drive.GOOGLE_EXPORTS[google] and google or nil })
         end
     end
     if #files == 0 and body:find("ServiceLogin", 1, true) then
@@ -167,9 +189,28 @@ function Drive.list(folder_id, key)
     return files
 end
 
+local registry_ok, DocumentRegistry = pcall(require, "document/documentregistry")
+if not registry_ok then DocumentRegistry = nil end
+
+-- Anything KOReader can open counts as a book (TXT, DOCX, HTML, MD, RTF, ODT…).
 local function isBook(name)
+    if DocumentRegistry then
+        local ok, has = pcall(DocumentRegistry.hasProvider, DocumentRegistry, name)
+        if ok then return has and true or false end
+    end
     local ext = name:match("%.([%w]+)$")
     return ext and Drive.BOOK_EXTS[ext:lower()] or false
+end
+Drive.isBook = isBook
+
+-- The name a Drive file gets on the Kindle: Google Docs/Slides get the
+-- extension of the format they're exported to.
+function Drive.localName(f)
+    local exp = f.google and Drive.GOOGLE_EXPORTS[f.google]
+    if exp and not f.name:lower():match("%." .. exp.ext .. "$") then
+        return f.name .. "." .. exp.ext
+    end
+    return f.name
 end
 
 local function safeName(name)
@@ -184,9 +225,17 @@ end
 
 --- Download one file to path (via path..".part"). Returns true or nil, err.
 function Drive.download(file, path, key)
-    local url = key
-        and ("https://www.googleapis.com/drive/v3/files/" .. file.id .. "?alt=media&supportsAllDrives=true&key=" .. urlencode(key))
-        or ("https://drive.usercontent.google.com/download?id=" .. file.id .. "&export=download&confirm=t")
+    local exp = file.google and Drive.GOOGLE_EXPORTS[file.google]
+    local url
+    if exp then
+        url = key
+            and ("https://www.googleapis.com/drive/v3/files/" .. file.id .. "/export?mimeType=" .. urlencode(exp.mime) .. "&key=" .. urlencode(key))
+            or string.format(exp.url, file.id)
+    else
+        url = key
+            and ("https://www.googleapis.com/drive/v3/files/" .. file.id .. "?alt=media&supportsAllDrives=true&key=" .. urlencode(key))
+            or ("https://drive.usercontent.google.com/download?id=" .. file.id .. "&export=download&confirm=t")
+    end
     local part = path .. ".part"
     for _ = 1, 6 do
         local fh = io.open(part, "wb")
@@ -200,12 +249,12 @@ function Drive.download(file, path, key)
             local f = io.open(part, "rb")
             local head = f and f:read(512) or ""
             if f then f:close() end
-            local is_html_book = (file.name or ""):lower():match("%.html?$")
+            local is_html_book = not exp and (file.name or ""):lower():match("%.x?html?$")
             if not is_html_book and (head:find("<!DOCTYPE html", 1, true) or head:find("<html", 1, true)) then
                 os.remove(part)
                 return nil, "Google sent a web page instead of the file (is it shared?)"
             end
-            if file.size and fileSize(part) ~= file.size then
+            if not exp and file.size and fileSize(part) ~= file.size then
                 os.remove(part)
                 return nil, "download was cut short"
             end
@@ -231,17 +280,19 @@ function Drive.sync()
     local files, err = Drive.list(folder, key)
     if not files then return nil, err end
     local dir = Drive.targetDir()
-    local res = { added = {}, skipped = 0, failed = {}, others = 0 }
+    local res = { added = {}, skipped = 0, failed = {}, others = 0, other_names = {} }
     for _, f in ipairs(files) do
-        if not isBook(f.name) then
+        local name = Drive.localName(f)
+        local path = dir .. "/" .. safeName(name)
+        if not isBook(path) then
             res.others = res.others + 1
+            table.insert(res.other_names, f.name)
         else
-            local path = dir .. "/" .. safeName(f.name)
             if fileSize(path) then
                 res.skipped = res.skipped + 1
             else
                 local ok, derr = Drive.download(f, path, key)
-                if ok then table.insert(res.added, f.name)
+                if ok then table.insert(res.added, name)
                 else
                     logger.warn("Pixel/Drive: download failed", f.name, derr)
                     res.failed[f.name] = derr
@@ -269,6 +320,14 @@ local function summary(res)
     for name, e in pairs(res.failed) do
         nf = nf + 1
         if nf <= 3 then table.insert(lines, "Failed: " .. name .. " (" .. tostring(e) .. ")") end
+    end
+    if (res.others or 0) > 0 then
+        local names = res.other_names or {}
+        local shown = {}
+        for i = 1, math.min(3, #names) do shown[i] = names[i] end
+        local more = #names > 3 and (", …") or ""
+        table.insert(lines, res.others .. " skipped (KOReader can't open them)"
+            .. (#shown > 0 and (": " .. table.concat(shown, ", ") .. more) or "") .. ".")
     end
     return table.concat(lines, "\n")
 end
