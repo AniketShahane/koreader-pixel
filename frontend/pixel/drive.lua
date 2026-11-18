@@ -6,6 +6,8 @@ Setup (once):
 * Put the folder's link (or just its ID) in `koreader/gdrive_folder.txt`,
   or in Settings > Pixel theme > Google Drive sync > Folder link.
 * Google Docs and Slides in the folder are exported (Docs as EPUB, Slides as PDF).
+* Links saved with "Save to Drive" (a text file holding just a URL) become an
+  EPUB of that web page.
 * Optional: a Google API key in `koreader/google_api_key.txt` makes listing
   use the official Drive API. Without one, the public folder page is read.
 
@@ -151,7 +153,7 @@ function Drive.list(folder_id, key)
             for _, f in ipairs(data.files or {}) do
                 if f.mimeType ~= "application/vnd.google-apps.folder" then
                     table.insert(files, { id = f.id, name = f.name, size = tonumber(f.size),
-                        google = GOOGLE_MIME_KIND[f.mimeType] })
+                        mime = f.mimeType, google = GOOGLE_MIME_KIND[f.mimeType] })
                 end
             end
             page = data.nextPageToken
@@ -271,6 +273,118 @@ function Drive.download(file, path, key)
     return nil, "too many redirects"
 end
 
+---------------------------------------------------------------------------
+-- Saved links: "Save to Drive" from a phone's share menu stores a web page
+-- as a tiny text file holding only its URL, with no extension. Sync fetches
+-- the page and saves the article as an EPUB (with its images), using the
+-- News downloader plugin's EPUB builder.
+---------------------------------------------------------------------------
+
+local LINK_MAX_BYTES = 4096
+
+-- Could this Drive file be a saved link? Only extension-less files, and only
+-- small plain-text ones when Drive told us the type and size.
+function Drive.mayBeLink(f)
+    if f.google then return false end
+    if f.name:match("%.[%w]+$") and not f.name:match("%s") then
+        -- "notes.bin": a real extension. (Titles such as "Page | Site 2.0" have spaces.)
+        return false
+    end
+    if f.mime and f.mime ~= "text/plain" then return false end
+    if f.size and f.size > LINK_MAX_BYTES then return false end
+    return true
+end
+
+-- The URL in a link file's text, or nil.
+function Drive.parseLink(content)
+    if type(content) ~= "string" then return nil end
+    local text = util.trim(content:gsub("^\239\187\191", "")) -- strip a UTF-8 BOM
+    local url = text:match("^(https?://%S+)$")
+    return url
+end
+
+-- Read a small Drive file into memory (at most LINK_MAX_BYTES).
+function Drive.readSmall(file, key)
+    local url = key
+        and ("https://www.googleapis.com/drive/v3/files/" .. file.id .. "?alt=media&supportsAllDrives=true&key=" .. urlencode(key))
+        or ("https://drive.usercontent.google.com/download?id=" .. file.id .. "&export=download&confirm=t")
+    for _ = 1, 6 do
+        local chunks, total = {}, 0
+        socketutil:set_timeout(15, 60)
+        local code, headers = socket.skip(1, http.request{
+            url = url,
+            method = "GET",
+            redirect = false,
+            headers = { ["user-agent"] = "KOReader-Pixel" },
+            sink = function(chunk)
+                if chunk then
+                    total = total + #chunk
+                    if total > LINK_MAX_BYTES then return nil, "too big" end
+                    table.insert(chunks, chunk)
+                end
+                return 1
+            end,
+        })
+        socketutil:reset_timeout()
+        if headers == nil then return nil, tostring(code or "network unreachable") end
+        if code >= 300 and code < 400 then
+            local loc = headers.location or headers.Location
+            if not loc then return nil, "redirect without location" end
+            if loc:sub(1, 1) == "/" then loc = url:match("^(https?://[^/]+)") .. loc end
+            url = loc
+        elseif code == 200 then
+            if total > LINK_MAX_BYTES then return nil, "too big" end
+            return table.concat(chunks)
+        else
+            return nil, "download error " .. tostring(code)
+        end
+    end
+    return nil, "too many redirects"
+end
+
+local function loadEpubBackend()
+    local ok, backend = pcall(require, "epubdownloadbackend")
+    if not ok then
+        -- The News downloader plugin may be disabled: load its builder by path.
+        package.path = "plugins/newsdownloader.koplugin/?.lua;" .. package.path
+        ok, backend = pcall(require, "epubdownloadbackend")
+    end
+    return ok and backend or nil, not ok and tostring(backend) or nil
+end
+
+-- Fetch a web page and save it at `path` (an .epub). Returns true or nil, err.
+-- If the link points at a file KOReader opens (a PDF…), returns false and the
+-- path to save that file under instead.
+function Drive.saveArticle(url, path)
+    local backend, berr = loadEpubBackend()
+    if not backend then return nil, "can't load the EPUB builder: " .. tostring(berr) end
+    local ok, content_type, content = pcall(backend.loadPage, backend, url)
+    if not ok then return nil, "couldn't open the link (" .. tostring(content_type) .. ")" end
+    content_type = util.trim(((content_type or "text/html"):match("^[^;]*")) or ""):lower()
+    if content_type == "text/html" or content_type == "application/xhtml+xml" then
+        -- No progress popups or questions in the middle of a sync: say yes to
+        -- "continue without the images that failed".
+        local Trapper = require("ui/trapper")
+        local orig_info, orig_confirm = Trapper.info, Trapper.confirm
+        Trapper.info = function() return true end
+        Trapper.confirm = function() return true end
+        local built_ok, built = pcall(backend.createEpub, backend, path, content, url, true, "", true)
+        Trapper.info, Trapper.confirm = orig_info, orig_confirm
+        if not built_ok then return nil, tostring(built) end
+        if not built then return nil, "couldn't build the EPUB" end
+        return true
+    end
+    -- A direct link to a document
+    local ext = DocumentRegistry and DocumentRegistry:mimeToExt(content_type)
+    if not ext then return nil, "the link isn't a web page or a book (" .. content_type .. ")" end
+    local doc_path = path:gsub("%.epub$", "") .. "." .. ext
+    local fh = io.open(doc_path, "wb")
+    if not fh then return nil, "can't write " .. doc_path end
+    fh:write(content)
+    fh:close()
+    return true, doc_path
+end
+
 --- Blocking sync. Returns a summary table, or nil and an error.
 -- { added = {names}, skipped = n, failed = {name = err}, others = n }
 function Drive.sync()
@@ -284,7 +398,29 @@ function Drive.sync()
     for _, f in ipairs(files) do
         local name = Drive.localName(f)
         local path = dir .. "/" .. safeName(name)
-        if not isBook(path) then
+        if not isBook(path) and Drive.mayBeLink(f) then
+            local epub_name = name .. ".epub"
+            local epub_path = dir .. "/" .. safeName(epub_name)
+            if fileSize(epub_path) or fileSize(dir .. "/" .. safeName(name .. ".pdf")) then
+                res.skipped = res.skipped + 1
+            else
+                local text, rerr = Drive.readSmall(f, key)
+                local url = Drive.parseLink(text)
+                if not url then
+                    if rerr then logger.info("Pixel/Drive: not a link", f.name, rerr) end
+                    res.others = res.others + 1
+                    table.insert(res.other_names, f.name)
+                else
+                    local ok, saved = Drive.saveArticle(url, epub_path)
+                    if ok then
+                        table.insert(res.added, saved and saved:match("([^/]+)$") or epub_name)
+                    else
+                        logger.warn("Pixel/Drive: saving link failed", f.name, url, saved)
+                        res.failed[f.name] = saved
+                    end
+                end
+            end
+        elseif not isBook(path) then
             res.others = res.others + 1
             table.insert(res.other_names, f.name)
         else

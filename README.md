@@ -43,7 +43,9 @@ sentence of that book*.
   folder's link in `koreader/gdrive_folder.txt`, or set it in
   **Settings > Pixel theme > Google Drive sync**. It adds any file KOReader can
   open (EPUB, PDF, TXT, DOCX, HTML, MD, RTF, ODT, MOBI, AZW, FB2, DJVU, CBZ,
-  images…). Google Docs come down as EPUB and Google Slides as PDF. It never
+  images…). Google Docs come down as EPUB and Google Slides as PDF. Links saved
+  with your phone's "Save to Drive" share option become an EPUB of the article,
+  images included. It never
   deletes or overwrites, and it tells you which files it skipped.
 - **File types:** everything stock KOReader opens. Reflowable: EPUB, FB2/FB3,
   MOBI, AZW, PRC/PDB, DOC, DOCX, ODT, RTF, TXT, MD, HTML/XHTML, CHM.
