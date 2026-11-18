@@ -47,6 +47,11 @@ sentence of that book*.
   with your phone's "Save to Drive" share option become an EPUB of the article,
   images included. It never
   deletes or overwrites, and it tells you which files it skipped.
+  **Automatic sync** (on by default, Settings > Pixel theme > Google Drive sync):
+  new files show up on their own. The Kindle checks the folder when Wi-Fi
+  connects, shortly after waking, and every 15 minutes while awake. It never
+  turns Wi-Fi on, its timer stops while the Kindle sleeps, and a check is one
+  small request, so the battery cost is small. With Wi-Fi off it does nothing.
 - **File types:** everything stock KOReader opens. Reflowable: EPUB, FB2/FB3,
   MOBI, AZW, PRC/PDB, DOC, DOCX, ODT, RTF, TXT, MD, HTML/XHTML, CHM.
   Fixed layout: PDF, DjVu, XPS, CBZ/CBR/CBT, PPTX, and images (JPG, PNG, GIF,

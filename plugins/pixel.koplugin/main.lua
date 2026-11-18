@@ -79,6 +79,7 @@ end
 
 function Pixel:init()
     self.ui.menu:registerToMainMenu(self)
+    require("pixel/drive").autoStart()
     if Theme.active and self.ui.document then
         self:initReader()
     end
@@ -255,6 +256,21 @@ end
 -- Don't leave our pop-ups behind when the book closes.
 -- Books first opened while IBM Plex Mono was the default move to Space Mono
 -- once (a font the reader picked themselves is left alone).
+-- Google Drive automatic sync (see frontend/pixel/drive.lua). Both the
+-- library and the reader have a Pixel instance; the Drive module keeps one
+-- shared state, and its own gap check stops double syncs.
+function Pixel:onResume()
+    require("pixel/drive").onResume()
+end
+
+function Pixel:onSuspend()
+    require("pixel/drive").onSuspend()
+end
+
+function Pixel:onNetworkConnected()
+    require("pixel/drive").onNetworkConnected()
+end
+
 function Pixel:onReaderReady()
     local ui = self.ui
     if not (Theme.active and ui and ui.rolling and ui.font and ui.doc_settings) then return end
@@ -471,6 +487,17 @@ function Pixel:addToMainMenu(menu_items)
             {
                 text = _("Google Drive sync"),
                 sub_item_table = {
+                    {
+                        text = _("Sync automatically"),
+                        help_text = _("On (default): new files in the folder appear on their own. The Kindle checks the folder when Wi-Fi connects, shortly after it wakes up, and every 15 minutes while it's awake. It never turns Wi-Fi on and does nothing while asleep, so the battery cost is small; with Wi-Fi off it does nothing at all."),
+                        checked_func = function() return G_reader_settings:nilOrTrue("pixel_drive_autosync") end,
+                        callback = function()
+                            G_reader_settings:flipNilOrTrue("pixel_drive_autosync")
+                            if G_reader_settings:nilOrTrue("pixel_drive_autosync") then
+                                require("pixel/drive").autoSync("turned on")
+                            end
+                        end,
+                    },
                     {
                         text = _("Sync now"),
                         callback = function() require("pixel/drive").syncInteractive(self.ui.file_chooser and self.ui or nil) end,

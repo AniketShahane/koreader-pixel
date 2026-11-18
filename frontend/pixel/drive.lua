@@ -282,6 +282,10 @@ end
 
 local LINK_MAX_BYTES = 4096
 
+-- Drive files already checked and found not to be links (id -> true), so
+-- automatic syncs don't download them again. Kept for this KOReader session.
+Drive.not_links = {}
+
 -- Could this Drive file be a saved link? Only extension-less files, and only
 -- small plain-text ones when Drive told us the type and size.
 function Drive.mayBeLink(f)
@@ -394,11 +398,14 @@ function Drive.sync()
     local files, err = Drive.list(folder, key)
     if not files then return nil, err end
     local dir = Drive.targetDir()
-    local res = { added = {}, skipped = 0, failed = {}, others = 0, other_names = {} }
+    local res = { added = {}, skipped = 0, failed = {}, others = 0, other_names = {}, not_link_ids = {} }
     for _, f in ipairs(files) do
         local name = Drive.localName(f)
         local path = dir .. "/" .. safeName(name)
-        if not isBook(path) and Drive.mayBeLink(f) then
+        if not isBook(path) and Drive.mayBeLink(f) and Drive.not_links[f.id] then
+            res.others = res.others + 1
+            table.insert(res.other_names, f.name)
+        elseif not isBook(path) and Drive.mayBeLink(f) then
             local epub_name = name .. ".epub"
             local epub_path = dir .. "/" .. safeName(epub_name)
             if fileSize(epub_path) or fileSize(dir .. "/" .. safeName(name .. ".pdf")) then
@@ -408,6 +415,7 @@ function Drive.sync()
                 local url = Drive.parseLink(text)
                 if not url then
                     if rerr then logger.info("Pixel/Drive: not a link", f.name, rerr) end
+                    if text or rerr == "too big" then table.insert(res.not_link_ids, f.id) end
                     res.others = res.others + 1
                     table.insert(res.other_names, f.name)
                 else
@@ -485,8 +493,13 @@ function Drive.syncInteractive(fm)
         })
         return
     end
+    if Drive.busy then
+        UIManager:show(InfoMessage:new{ text = "Google Drive sync is already running.", timeout = 3 })
+        return
+    end
     NetworkMgr:runWhenOnline(function()
         Trapper:wrap(function()
+            Drive.busy = true
             local wait = InfoMessage:new{ text = "SYNCING GOOGLE DRIVE…\n\nTap to cancel." }
             UIManager:show(wait)
             UIManager:forceRePaint()
@@ -510,7 +523,10 @@ function Drive.syncInteractive(fm)
                 err = raw:sub(2)
             end
             UIManager:close(wait)
+            Drive.busy = false
             if res then
+                Drive.rememberNotLinks(res)
+                Drive.last_sync = os.time()
                 res.added = res.added or {}
                 res.failed = res.failed or {}
                 res.skipped = res.skipped or 0
@@ -521,6 +537,136 @@ function Drive.syncInteractive(fm)
             end
         end)
     end)
+end
+
+function Drive.rememberNotLinks(res)
+    for _, id in ipairs(res.not_link_ids or {}) do Drive.not_links[id] = true end
+end
+
+---------------------------------------------------------------------------
+-- Automatic sync
+--
+-- Battery first: it never turns Wi-Fi on, and its timer is stopped while the
+-- Kindle sleeps. It only checks when Wi-Fi is already connected:
+-- * when Wi-Fi connects, and when KOReader starts with Wi-Fi on;
+-- * a little after the Kindle wakes up (Wi-Fi takes a few seconds to come back);
+-- * every 15 minutes while the Kindle is awake and connected.
+-- A check is one small request listing the folder; files are downloaded only
+-- when something is new. It runs in a background process, so reading isn't
+-- interrupted, and shows a short note only when new books arrive.
+---------------------------------------------------------------------------
+
+Drive.AUTO_INTERVAL = 15 * 60 -- seconds between checks while awake
+Drive.AUTO_MIN_GAP = 2 * 60   -- never check more often than this
+
+function Drive.autoEnabled()
+    return G_reader_settings:nilOrTrue("pixel_drive_autosync") and Drive.getFolderId() ~= nil
+end
+
+local function wifiConnected()
+    local NetworkMgr = require("ui/network/manager")
+    local ok, on = pcall(function() return NetworkMgr:isWifiOn() and NetworkMgr:isConnected() end)
+    return ok and on and true or false
+end
+
+local function refreshLibrary()
+    local ok, FM = pcall(require, "apps/filemanager/filemanager")
+    if ok and FM.instance and FM.instance.file_chooser then FM.instance.file_chooser:refreshPath() end
+end
+
+--- Run one quiet sync in a background process. `why` is for the log.
+function Drive.autoSync(why)
+    if not Drive.autoEnabled() or Drive.busy then return end
+    if Drive.last_sync and os.time() - Drive.last_sync < Drive.AUTO_MIN_GAP then return end
+    if not wifiConnected() then return end
+    local ffiutil = require("ffi/util")
+    local UIManager = require("ui/uimanager")
+    logger.info("Pixel/Drive: automatic sync", why)
+    Drive.busy = true
+    Drive.last_sync = os.time()
+    local pid, fd = ffiutil.runInSubProcess(function(_, child_fd)
+        local ok, res, err = pcall(Drive.sync)
+        local out
+        if not ok then out = "E" .. tostring(res)
+        elseif not res then out = "E" .. tostring(err)
+        else out = "R" .. encodeResult(res) end
+        ffiutil.writeToFD(child_fd, out, true)
+    end, true)
+    if not pid then
+        Drive.busy = false
+        return
+    end
+    local raw = ""
+    local started = os.time()
+    local function finish()
+        Drive.busy = false
+        if raw:sub(1, 1) ~= "R" then
+            logger.warn("Pixel/Drive: automatic sync failed", raw:sub(2))
+            return
+        end
+        local ok, res = pcall(require("rapidjson").decode, raw:sub(2))
+        if not ok or type(res) ~= "table" then return end
+        Drive.rememberNotLinks(res)
+        local added = res.added or {}
+        if #added > 0 then
+            refreshLibrary()
+            local Notification = require("ui/widget/notification")
+            local text = #added == 1 and ("New from Drive: " .. added[1]) or (#added .. " new books from Drive")
+            Notification:notify(text, Notification.SOURCE_ALWAYS_SHOW)
+        end
+    end
+    local function poll()
+        if fd and ffiutil.getNonBlockingReadSize(fd) ~= 0 then
+            raw = raw .. (ffiutil.readAllFromFD(fd) or "")
+            fd = nil
+        end
+        if ffiutil.isSubProcessDone(pid) then
+            if fd then raw = raw .. (ffiutil.readAllFromFD(fd) or ""); fd = nil end
+            return finish()
+        end
+        if os.time() - started > 10 * 60 then -- stuck: give up
+            ffiutil.terminateSubProcess(pid)
+            raw = "Etimed out"
+        end
+        UIManager:scheduleIn(2, poll)
+    end
+    UIManager:scheduleIn(1, poll)
+end
+
+local function periodic()
+    Drive.autoSync("periodic")
+    if Drive.auto_started then
+        require("ui/uimanager"):scheduleIn(Drive.AUTO_INTERVAL, periodic)
+    end
+end
+
+--- Start the 15-minute check (once per KOReader session).
+function Drive.autoStart()
+    if Drive.auto_started then return end
+    Drive.auto_started = true
+    local UIManager = require("ui/uimanager")
+    UIManager:scheduleIn(Drive.AUTO_INTERVAL, periodic)
+    UIManager:scheduleIn(20, function() Drive.autoSync("start") end)
+end
+
+-- Going to sleep: stop the 15-minute timer, so nothing at all runs while asleep.
+function Drive.onSuspend()
+    require("ui/uimanager"):unschedule(periodic)
+end
+
+-- Wi-Fi comes back a few seconds after the Kindle wakes: look twice.
+function Drive.onResume()
+    local UIManager = require("ui/uimanager")
+    if Drive.auto_started then
+        UIManager:unschedule(periodic)
+        UIManager:scheduleIn(Drive.AUTO_INTERVAL, periodic)
+    end
+    UIManager:scheduleIn(10, function() Drive.autoSync("resume") end)
+    UIManager:scheduleIn(40, function() Drive.autoSync("resume") end)
+end
+
+function Drive.onNetworkConnected()
+    require("ui/uimanager"):scheduleIn(5, function() Drive.autoSync("wifi connected") end)
 end
 
 return Drive
