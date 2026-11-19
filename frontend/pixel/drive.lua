@@ -366,13 +366,15 @@ function Drive.saveArticle(url, path)
     if not ok then return nil, "couldn't open the link (" .. tostring(content_type) .. ")" end
     content_type = util.trim(((content_type or "text/html"):match("^[^;]*")) or ""):lower()
     if content_type == "text/html" or content_type == "application/xhtml+xml" then
+        -- Empty filter tables mean "use the built-in article/junk selectors"
+        -- (nil makes the builder crash, so every link failed before).
         -- No progress popups or questions in the middle of a sync: say yes to
         -- "continue without the images that failed".
         local Trapper = require("ui/trapper")
         local orig_info, orig_confirm = Trapper.info, Trapper.confirm
         Trapper.info = function() return true end
         Trapper.confirm = function() return true end
-        local built_ok, built = pcall(backend.createEpub, backend, path, content, url, true, "", true)
+        local built_ok, built = pcall(backend.createEpub, backend, path, content, url, true, "", true, {}, {})
         Trapper.info, Trapper.confirm = orig_info, orig_confirm
         if not built_ok then return nil, tostring(built) end
         if not built then return nil, "couldn't build the EPUB" end
