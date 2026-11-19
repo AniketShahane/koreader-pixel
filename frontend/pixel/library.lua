@@ -590,6 +590,7 @@ function Hero:init()
 
     local name = (file:match("([^/]+)$") or ""):gsub("%.[%w]+$", "")
     local title = (not info.ignore_meta and info.title) or name:match("^.-%s+%-%s+(.+)$") or name
+    title = DefaultCover.displayTitle(file, title)
     self.title = Theme.upper(Library.shortTitle(title))
     local authors = (not info.ignore_meta and info.authors) or name:match("^(.-)%s+%-%s+.+$") or ""
     self.author = Theme.upper((authors:gsub("\n.*", "")))
@@ -773,6 +774,7 @@ function Library.updateMosaicItem(item, BookInfoManager)
             end
             local title = (not bookinfo.ignore_meta and bookinfo.title) or file_title
             if title == base then title = file_title end -- "title" was just the file name
+            title = DefaultCover.displayTitle(item.filepath, title)
             if not cover and item.do_cover_image and not item.file_deleted then
                 -- No cover in the book: draw one (Saved Page for web links, Pattern otherwise)
                 local L = Library.tileLayout(w, h)

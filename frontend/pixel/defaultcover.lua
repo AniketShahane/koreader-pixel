@@ -125,6 +125,14 @@ local function articleTitle(title)
     return title
 end
 
+--- The title to show for `path`: web articles lose a trailing " | Site name".
+function DefaultCover.displayTitle(path, title)
+    if not title or title == "" then return title end
+    if articleTitle(title) == title then return title end -- nothing to cut: skip the lookup
+    if DefaultCover.kind(path) == "web" then return articleTitle(title) end
+    return title
+end
+
 --- Everything the cover shows. title/authors come from the book's metadata.
 function DefaultCover.describe(path, title, authors)
     local kind = DefaultCover.kind(path)
