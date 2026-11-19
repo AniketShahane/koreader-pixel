@@ -83,6 +83,16 @@ do
         return orig_show_dir(self, dirname)
     end
 
+    -- Kindle launcher scripts (documents/*.sh: KOReader, jailbreak, KUAL tools…)
+    -- open as text in KOReader, but they're not books: keep them out of the library.
+    local orig_show_file = FileChooser.show_file
+    function FileChooser:show_file(filename, fullpath)
+        if self.pixel_flat and filename:lower():match("%.sh$") then
+            return false
+        end
+        return orig_show_file(self, filename, fullpath)
+    end
+
     function FileChooser:genItemTableFromPath(path)
         -- Books only: folders are hidden (Settings > Pixel theme > Show folders in library
         -- brings them back), and always while a READING/DONE/NEW tab is active.
