@@ -327,7 +327,7 @@ local function paintPattern(bb, d, W, H)
     local rule = math.max(2, math.floor(1.6 * u + 0.5))
     rect(bb, 0, PH, W, rule, INK)
     local pad_x, pad_t, pad_b = 8 * u, 5 * u, 5 * u
-    local meta_px = math.max(9, 4 * u)
+    local meta_px = math.max(13, 4.6 * u)
     local meta_face = face(MONO, meta_px)
     local meta_h = math.ceil(meta_px * 1.5)
     local ty = PH + rule + pad_t
@@ -350,7 +350,7 @@ end
 local function paintSavedPage(bb, d, W, H)
     local u = W / 100
     local pad = 7 * u
-    local foot_px = math.max(9, 3.8 * u)
+    local foot_px = math.max(13, 4.4 * u)
     local foot_h = math.ceil(foot_px * 1.6)
     local b = math.max(2, math.floor(1.4 * u + 0.5)) -- window border
     local n = math.max(2, math.floor(2 * u + 0.5))   -- notched corners, like the rest of Pixel
@@ -360,7 +360,7 @@ local function paintSavedPage(bb, d, W, H)
     Paint.notchedBorder(bb, wx, wy, ww, wh, b, INK, n)
 
     -- Window bar: three square buttons and the address box
-    local url_px = math.max(9, 3.8 * u)
+    local url_px = math.max(13, 4.6 * u)
     local bar_pad = math.floor(2.6 * u + 0.5)
     local box_h = math.ceil(url_px * 1.7)
     local bar_h = bar_pad * 2 + box_h
