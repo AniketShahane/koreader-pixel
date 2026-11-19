@@ -83,11 +83,13 @@ do
         return orig_show_dir(self, dirname)
     end
 
-    -- Kindle launcher scripts (documents/*.sh: KOReader, jailbreak, KUAL tools…)
-    -- open as text in KOReader, but they're not books: keep them out of the library.
+    -- Kindle launcher scripts (documents/*.sh: KOReader, jobman, KUAL tools…)
+    -- and the jailbreak's JAILBROKEN marker open as text in KOReader, but they're
+    -- not books: keep them out of the library.
     local orig_show_file = FileChooser.show_file
     function FileChooser:show_file(filename, fullpath)
-        if self.pixel_flat and filename:lower():match("%.sh$") then
+        local lower = filename:lower()
+        if self.pixel_flat and (lower:match("%.sh$") or lower:match("^jailbroken%.")) then
             return false
         end
         return orig_show_file(self, filename, fullpath)
