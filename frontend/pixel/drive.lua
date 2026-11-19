@@ -16,6 +16,7 @@ the Kindle yet into the home folder. It never deletes or overwrites anything.
 ]]
 
 local DataStorage = require("datastorage")
+local lfs = require("libs/libkoreader-lfs")
 local logger = require("logger")
 local util = require("util")
 
@@ -221,7 +222,6 @@ local function safeName(name)
 end
 
 local function fileSize(path)
-    local lfs = require("libs/libkoreader-lfs")
     return lfs.attributes(path, "size")
 end
 
@@ -376,6 +376,7 @@ function Drive.saveArticle(url, path)
         Trapper.info, Trapper.confirm = orig_info, orig_confirm
         if not built_ok then return nil, tostring(built) end
         if not built then return nil, "couldn't build the EPUB" end
+        require("pixel/defaultcover").rememberLink(path, url)
         return true
     end
     -- A direct link to a document
@@ -386,6 +387,7 @@ function Drive.saveArticle(url, path)
     if not fh then return nil, "can't write " .. doc_path end
     fh:write(content)
     fh:close()
+    require("pixel/defaultcover").rememberLink(doc_path, url)
     return true, doc_path
 end
 
@@ -410,6 +412,13 @@ function Drive.sync()
             local epub_path = dir .. "/" .. safeName(epub_name)
             if fileSize(epub_path) or fileSize(dir .. "/" .. safeName(name .. ".pdf")) then
                 res.skipped = res.skipped + 1
+                -- Saved before links were remembered: look up its URL once, for its cover
+                local DefaultCover = require("pixel/defaultcover")
+                if fileSize(epub_path) and not DefaultCover.knownLink(epub_path) then
+                    local text = Drive.readSmall(f, key)
+                    DefaultCover.rememberLink(epub_path, Drive.parseLink(text) or false,
+                        lfs.attributes(epub_path, "modification"))
+                end
             else
                 local text, rerr = Drive.readSmall(f, key)
                 local url = Drive.parseLink(text)

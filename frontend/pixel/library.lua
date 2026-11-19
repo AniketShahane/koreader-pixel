@@ -11,7 +11,8 @@ Three parts, all drawn by hand so they match the mock-up exactly:
             left and progress. The other books go 4 across under it.
 * Tile    - one book: its whole cover in a notched pixel frame, the title
             under it (two lines), and a block progress bar. Books without a
-            cover get one of the mock-up's ten pixel patterns.
+            cover get a drawn one (see pixel/defaultcover.lua); folders get
+            one of the mock-up's ten pixel patterns.
 
 Tiles are built by updateMosaicItem(), which the CoverBrowser plugin's
 mosaic view calls instead of its own tile code when the theme is on. Cover
@@ -20,6 +21,7 @@ cover of every EPUB/PDF shows up.
 ]]
 
 local Blitbuffer = require("ffi/blitbuffer")
+local DefaultCover = require("pixel/defaultcover")
 local Device = require("device")
 local Geom = require("ui/geometry")
 local GestureRange = require("ui/gesturerange")
@@ -32,6 +34,7 @@ local Theme = require("pixel/theme")
 local UIManager = require("ui/uimanager")
 local Widget = require("ui/widget/widget")
 local lfs = require("libs/libkoreader-lfs")
+local logger = require("logger")
 local util = require("util")
 local Screen = Device.screen
 
@@ -590,6 +593,11 @@ function Hero:init()
     self.title = Theme.upper(Library.shortTitle(title))
     local authors = (not info.ignore_meta and info.authors) or name:match("^(.-)%s+%-%s+.+$") or ""
     self.author = Theme.upper((authors:gsub("\n.*", "")))
+    if not self.cover_bb and info.cover_fetched then
+        local dw, dh = DefaultCover.fit(cw, ch)
+        local ok, bb = pcall(DefaultCover.render, file, title, authors, dw, dh)
+        if ok then self.cover_bb = bb else logger.warn("Pixel: default cover failed", bb) end
+    end
 
     local BookList = require("ui/widget/booklist")
     self.percent = math.max(0, math.min(1, BookList.getBookInfo(file).percent_finished or 0))
@@ -765,6 +773,14 @@ function Library.updateMosaicItem(item, BookInfoManager)
             end
             local title = (not bookinfo.ignore_meta and bookinfo.title) or file_title
             if title == base then title = file_title end -- "title" was just the file name
+            if not cover and item.do_cover_image and not item.file_deleted then
+                -- No cover in the book: draw one (Saved Page for web links, Pattern otherwise)
+                local L = Library.tileLayout(w, h)
+                local cw, ch = DefaultCover.fit(L.cover_w, L.cover_h)
+                local ok, bb = pcall(DefaultCover.render, item.filepath, title,
+                    not bookinfo.ignore_meta and bookinfo.authors or nil, cw, ch)
+                if ok then cover = bb else logger.warn("Pixel: default cover failed", bb) end
+            end
             tile = Tile:new{
                 width = w, height = h,
                 title = Library.shortTitle(title),
